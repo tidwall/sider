@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/btree"
 )
@@ -14,7 +15,7 @@ import (
 func (s *Server) commandTable() {
 	s.register("get", getCommand, "r")
 	s.register("set", setCommand, "w")
-
+	s.register("del", delCommand, "w")
 }
 
 type Key struct {
@@ -33,7 +34,9 @@ type Command struct {
 }
 
 type Server struct {
+	mu       sync.RWMutex
 	commands map[string]*Command
+	keys     *btree.BTree
 }
 
 func (s *Server) register(commandName string, f func(client *Client), opts string) {
@@ -53,9 +56,29 @@ func (s *Server) register(commandName string, f func(client *Client), opts strin
 	s.commands[commandName] = &cmd
 }
 
+func (s *Server) GetKey(name string) (interface{}, bool) {
+	item := s.keys.Get(&Key{Name: name})
+	if item == nil {
+		return nil, false
+	}
+	return item.(*Key).Value, true
+}
+
+func (s *Server) SetKey(name string, value interface{}) {
+	s.keys.ReplaceOrInsert(&Key{Name: name, Value: value})
+}
+func (s *Server) DelKey(name string) (interface{}, bool) {
+	item := s.keys.Delete(&Key{Name: name})
+	if item == nil {
+		return nil, false
+	}
+	return item.(*Key).Value, true
+}
+
 func Start(addr string) {
 	s := &Server{
 		commands: make(map[string]*Command),
+		keys:     btree.New(16),
 	}
 	s.commandTable()
 	l, err := net.Listen("tcp", addr)
@@ -99,14 +122,25 @@ func handleConn(conn net.Conn, server *Server) {
 			c.ReplyString("PONG")
 		default:
 			if cmd, ok := server.commands[command]; ok {
+				if cmd.Write {
+					server.mu.Lock()
+				} else if cmd.Read {
+					server.mu.RLock()
+				}
 				cmd.Func(c)
+				if cmd.Write {
+					server.mu.Unlock()
+				} else if cmd.Read {
+					server.mu.RUnlock()
+				}
 			} else {
 				c.ReplyError("unknown command '" + args[0] + "'")
 			}
 		}
-
 		if flush {
-			wr.Flush()
+			if err := wr.Flush(); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -139,14 +173,12 @@ func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 			// notify the caller that we should flush after this command.
 			rd.buf = nil
 			return raw, args, true, nil
-		} else if len(raw) > 0 {
+		}
+		if len(raw) > 0 {
 			// have a command, but there's still data in the buffer.
 			// notify the caller that we should flush *only* when there's copied data.
 			rd.buf = rd.buf[len(raw):]
 			return raw, args, rd.copied, nil
-		} else if raw != nil {
-			// empty command
-			return raw, args, true, nil
 		}
 		// only have a partial command, read more data
 	}
@@ -185,8 +217,8 @@ func readBufferedCommand(data []byte) ([]byte, []string, error) {
 			if err != nil {
 				return nil, nil, &protocolError{"invalid multibulk length"}
 			}
-			if n < 0 {
-				return []byte{}, []string{}, nil
+			if n <= 0 {
+				return data[:i+1], []string{}, nil
 			}
 			i++
 			for j := int64(0); j < n; j++ {
@@ -215,6 +247,7 @@ func readBufferedCommand(data []byte) ([]byte, []string, error) {
 						if j == int64(n-1) {
 							return data[:i], args, nil
 						}
+						break
 					}
 				}
 			}
@@ -232,6 +265,9 @@ func readBufferedTelnetCommand(data []byte) ([]byte, []string, error) {
 				line = data[:i-1]
 			} else {
 				line = data[:i]
+			}
+			if len(line) == 0 {
+				return data[:i+1], []string{}, nil
 			}
 			return data[:i+1], []string{string(line)}, nil
 		}
