@@ -1,3 +1,4 @@
 .DS_Store
 tile38-server
 *.aof
+*.rdb

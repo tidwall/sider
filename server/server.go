@@ -11,6 +11,12 @@ import (
 	"github.com/google/btree"
 )
 
+func (s *Server) commandTable() {
+	s.register("get", getCommand, "r")
+	s.register("set", setCommand, "w")
+
+}
+
 type Key struct {
 	Name  string
 	Value interface{}
@@ -20,7 +26,38 @@ func (key *Key) Less(item btree.Item) bool {
 	return key.Name < item.(*Key).Name
 }
 
+type Command struct {
+	Write bool
+	Read  bool
+	Func  func(client *Client)
+}
+
+type Server struct {
+	commands map[string]*Command
+}
+
+func (s *Server) register(commandName string, f func(client *Client), opts string) {
+	var cmd Command
+	cmd.Func = f
+	for _, c := range []byte(opts) {
+		switch c {
+		case 'r':
+			if !cmd.Write {
+				cmd.Read = true
+			}
+		case 'w':
+			cmd.Write = true
+			cmd.Read = false
+		}
+	}
+	s.commands[commandName] = &cmd
+}
+
 func Start(addr string) {
+	s := &Server{
+		commands: make(map[string]*Command),
+	}
+	s.commandTable()
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
@@ -31,34 +68,43 @@ func Start(addr string) {
 		if err != nil {
 			log.Printf("accept: %v", err)
 		}
-		go handleConn(conn)
+		go handleConn(conn, s)
 	}
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn net.Conn, server *Server) {
 	defer conn.Close()
 	wr := bufio.NewWriter(conn)
+	defer wr.Flush()
 	rd := &CommandReader{rd: conn, rbuf: make([]byte, 64*1024)}
+	c := &Client{wr: wr, server: server}
 	for {
-		raw, args, flush, err := rd.ReadCommand()
+		_, args, flush, err := rd.ReadCommand()
 		if err != nil {
 			if err, ok := err.(*protocolError); ok {
-				conn.Write([]byte("-ERR Protocol error: " + err.msg + "\r\n"))
+				c.ReplyError(err.Error())
 			}
 			return
 		}
 		if len(args) == 0 {
 			continue
 		}
-		raw = raw
-		switch strings.ToLower(args[0]) {
+		c.args = args
+		command := strings.ToLower(args[0])
+		switch command {
 		case "quit":
-			wr.Write([]byte("+OK\r\n"))
-			wr.Flush()
+			c.ReplyString("OK")
 			return
 		case "ping":
-			wr.Write([]byte("+PONG\r\n"))
+			c.ReplyString("PONG")
+		default:
+			if cmd, ok := server.commands[command]; ok {
+				cmd.Func(c)
+			} else {
+				c.ReplyError("unknown command '" + args[0] + "'")
+			}
 		}
+
 		if flush {
 			wr.Flush()
 		}
