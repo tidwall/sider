@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,10 +93,9 @@ func Start(addr string) {
 		keys:     btree.New(16),
 	}
 	s.commandTable()
-	dir := "."
-	f, err := os.OpenFile(path.Join(dir, "appendonly.aof"), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	f, err := os.OpenFile("appendonly.aof", os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("# %v", err)
 	}
 	defer func() {
 		f.Sync()
@@ -110,16 +109,38 @@ func Start(addr string) {
 		}
 	}()
 	s.aof = f
+	rd := &CommandReader{rd: s.aof, rbuf: make([]byte, 64*1024)}
+	c := &Client{wr: ioutil.Discard, server: s}
+	var read int
+	for {
+		raw, args, _, err := rd.ReadCommand()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Fatalf("# %v", err)
+		}
+		c.args = args
+		c.raw = raw
+		if cmd, ok := s.commands[args[0]]; ok {
+			cmd.Func(c)
+		} else {
+			c.ReplyError("unknown command '" + args[0] + "'")
+		}
+		read++
+	}
+	log.Printf("* AOF loaded %d commands", read)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("# %v", err)
 	}
 	defer l.Close()
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Printf("accept: %v", err)
+			log.Printf("# %v", err)
+			continue
 		}
 		go handleConn(conn, s)
 	}
@@ -209,10 +230,11 @@ type CommandReader struct {
 func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, err error) {
 	if len(rd.buf) > 0 {
 		// there is already data in the buffer, do we have enough to make a full command?
-		raw, args, err := readBufferedCommand(rd.buf)
+		raw, args, telnet, err := readBufferedCommand(rd.buf)
 		if err != nil {
 			return nil, nil, false, err
 		}
+		telnet = telnet
 		if len(raw) == len(rd.buf) {
 			// we have a command and it's exactly the size of the buffer.
 			// clear out the buffer and return the command
@@ -249,7 +271,7 @@ func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 	return rd.ReadCommand()
 }
 
-func readBufferedCommand(data []byte) ([]byte, []string, error) {
+func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 	var args []string
 	if data[0] != '*' {
 		return readBufferedTelnetCommand(data)
@@ -257,41 +279,41 @@ func readBufferedCommand(data []byte) ([]byte, []string, error) {
 	for i := 1; i < len(data); i++ {
 		if data[i] == '\n' {
 			if data[i-1] != '\r' {
-				return nil, nil, &protocolError{"invalid multibulk length"}
+				return nil, nil, false, &protocolError{"invalid multibulk length"}
 			}
 			n, err := strconv.ParseInt(string(data[1:i-1]), 10, 64)
 			if err != nil {
-				return nil, nil, &protocolError{"invalid multibulk length"}
+				return nil, nil, false, &protocolError{"invalid multibulk length"}
 			}
 			if n <= 0 {
-				return data[:i+1], []string{}, nil
+				return data[:i+1], []string{}, false, nil
 			}
 			i++
 			for j := int64(0); j < n; j++ {
 				if i == len(data) {
-					return nil, nil, nil
+					return nil, nil, false, nil
 				}
 				if data[i] != '$' {
-					return nil, nil, &protocolError{"expected '$', got '" + string(data[i]) + "'"}
+					return nil, nil, false, &protocolError{"expected '$', got '" + string(data[i]) + "'"}
 				}
 				ii := i + 1
 				for ; i < len(data); i++ {
 					if data[i] == '\n' {
 						if data[i-1] != '\r' {
-							return nil, nil, &protocolError{"invalid bulk length"}
+							return nil, nil, false, &protocolError{"invalid bulk length"}
 						}
 						n2, err := strconv.ParseUint(string(data[ii:i-1]), 10, 64)
 						if err != nil {
-							return nil, nil, &protocolError{"invalid bulk length"}
+							return nil, nil, false, &protocolError{"invalid bulk length"}
 						}
 						i++
 						if len(data)-i < int(n2+2) {
-							return nil, nil, nil // more data
+							return nil, nil, false, nil // more data
 						}
 						args = append(args, string(data[i:i+int(n2)]))
 						i += int(n2 + 2)
 						if j == int64(n-1) {
-							return data[:i], args, nil
+							return data[:i], args, false, nil
 						}
 						break
 					}
@@ -300,10 +322,10 @@ func readBufferedCommand(data []byte) ([]byte, []string, error) {
 			break
 		}
 	}
-	return nil, nil, nil // more data
+	return nil, nil, false, nil // more data
 }
 
-func readBufferedTelnetCommand(data []byte) ([]byte, []string, error) {
+func readBufferedTelnetCommand(data []byte) ([]byte, []string, bool, error) {
 	for i := 1; i < len(data); i++ {
 		if data[i] == '\n' {
 			var line []byte
@@ -313,10 +335,56 @@ func readBufferedTelnetCommand(data []byte) ([]byte, []string, error) {
 				line = data[:i]
 			}
 			if len(line) == 0 {
-				return data[:i+1], []string{}, nil
+				return data[:i+1], []string{}, true, nil
 			}
-			return data[:i+1], []string{string(line)}, nil
+			args, err := parseArgsFromTelnetLine(line)
+			if err != nil {
+				return nil, nil, true, err
+			}
+			return data[:i+1], args, true, nil
 		}
 	}
-	return nil, nil, nil
+	return nil, nil, true, nil
+}
+
+func parseArgsFromTelnetLine(line []byte) ([]string, error) {
+	var args []string
+	var s int
+	lspace := true
+	quote := false
+	lquote := false
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		default:
+			lspace = false
+		case '"':
+			if quote {
+				args = append(args, string(line[s+1:i]))
+				quote = false
+				s = i + 1
+				lquote = true
+				continue
+			}
+			if !lspace {
+				return nil, &protocolError{"unbalanced quotes in request"}
+			}
+			lspace = false
+			quote = true
+		case ' ':
+			if lquote {
+				s++
+				continue
+			}
+			args = append(args, string(line[s:i]))
+			s = i + 1
+			lspace = true
+		}
+	}
+	if quote {
+		return nil, &protocolError{"unbalanced quotes in request"}
+	}
+	if s < len(line) {
+		args = append(args, string(line[s:]))
+	}
+	return args, nil
 }
