@@ -2,12 +2,16 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"log"
 	"net"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 )
@@ -33,10 +37,18 @@ type Command struct {
 	Func  func(client *Client)
 }
 
+type Config struct {
+	AOFSync int // 0 = never, 1 = everysecond, 2 = always
+}
+
 type Server struct {
 	mu       sync.RWMutex
 	commands map[string]*Command
 	keys     *btree.BTree
+	config   Config
+	aof      *os.File
+	aofbuf   bytes.Buffer
+	aofmu    sync.Mutex
 }
 
 func (s *Server) register(commandName string, f func(client *Client), opts string) {
@@ -81,11 +93,29 @@ func Start(addr string) {
 		keys:     btree.New(16),
 	}
 	s.commandTable()
+	dir := "."
+	f, err := os.OpenFile(path.Join(dir, "appendonly.aof"), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		f.Sync()
+		f.Close()
+	}()
+	go func() {
+		for range time.NewTicker(time.Second).C {
+			s.aofmu.Lock()
+			s.aof.Sync()
+			s.aofmu.Unlock()
+		}
+	}()
+	s.aof = f
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer l.Close()
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -102,7 +132,7 @@ func handleConn(conn net.Conn, server *Server) {
 	rd := &CommandReader{rd: conn, rbuf: make([]byte, 64*1024)}
 	c := &Client{wr: wr, server: server}
 	for {
-		_, args, flush, err := rd.ReadCommand()
+		raw, args, flush, err := rd.ReadCommand()
 		if err != nil {
 			if err, ok := err.(*protocolError); ok {
 				c.ReplyError(err.Error())
@@ -113,6 +143,7 @@ func handleConn(conn net.Conn, server *Server) {
 			continue
 		}
 		c.args = args
+		c.raw = raw
 		command := strings.ToLower(args[0])
 		switch command {
 		case "quit":
@@ -129,6 +160,7 @@ func handleConn(conn net.Conn, server *Server) {
 				}
 				cmd.Func(c)
 				if cmd.Write {
+					server.aofbuf.Write(c.raw)
 					server.mu.Unlock()
 				} else if cmd.Read {
 					server.mu.RUnlock()
@@ -138,6 +170,20 @@ func handleConn(conn net.Conn, server *Server) {
 			}
 		}
 		if flush {
+			server.mu.Lock()
+			if server.aofbuf.Len() > 0 {
+				b := server.aofbuf.Bytes()
+				server.aofbuf.Reset()
+				server.mu.Unlock()
+				server.aofmu.Lock()
+				if _, err := server.aof.Write(b); err != nil {
+					panic(err)
+				}
+				server.aofmu.Unlock()
+			} else {
+				server.mu.Unlock()
+			}
+
 			if err := wr.Flush(); err != nil {
 				return
 			}

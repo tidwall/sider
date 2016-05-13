@@ -6,9 +6,10 @@ import (
 )
 
 type Client struct {
-	wr     io.Writer
-	server *Server
-	args   []string
+	wr     io.Writer // client writer
+	server *Server   // shared server
+	args   []string  // command arguments
+	raw    []byte    // the raw command bytes
 }
 
 func (c *Client) ReplyString(s string) {
