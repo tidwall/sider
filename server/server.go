@@ -24,6 +24,9 @@ func (s *Server) commandTable() {
 	s.register("append", appendCommand, "w+")      // Strings
 	s.register("bitcount", bitcountCommand, "r")   // Strings
 	s.register("incr", incrCommand, "w+")          // Strings
+	s.register("incrby", incrbyCommand, "w+")      // Strings
+	s.register("decr", decrCommand, "w+")          // Strings
+	s.register("decrby", decrbyCommand, "w+")      // Strings
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
 	s.register("flushdb", flushdbCommand, "w+")    // Server
@@ -129,6 +132,8 @@ func (s *Server) UpdateKey(name string, value interface{}) {
 	item := s.keys.Get(&Key{Name: name})
 	if item != nil {
 		item.(*Key).Value = value
+	} else {
+		s.SetKey(name, value)
 	}
 }
 

@@ -51,6 +51,45 @@ func incrCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
+	genericIncrbyCommand(client, 1)
+}
+
+func incrbyCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	n, err := strconv.ParseInt(client.args[2], 10, 64)
+	if err != nil {
+		client.ReplyError("value is not an integer or out of range")
+		return
+	}
+	genericIncrbyCommand(client, n)
+}
+
+func decrCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	genericIncrbyCommand(client, -1)
+}
+
+func decrbyCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	n, err := strconv.ParseInt(client.args[2], 10, 64)
+	if err != nil {
+		client.ReplyError("value is not an integer or out of range")
+		return
+	}
+	genericIncrbyCommand(client, -n)
+}
+
+func genericIncrbyCommand(client *Client, delta int64) {
+	var n int64
 	key, ok := client.server.GetKey(client.args[1])
 	if ok {
 		switch s := key.(type) {
@@ -58,19 +97,19 @@ func incrCommand(client *Client) {
 			client.ReplyTypeError()
 			return
 		case string:
-			n, err := strconv.ParseInt(s, 10, 64)
+			var err error
+			n, err = strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				client.ReplyTypeError()
 				return
 			}
-			n++
-			client.server.UpdateKey(client.args[1], strconv.FormatInt(n, 10))
-			client.ReplyInt(int(n))
+			n += delta
 		}
 	} else {
-		client.server.SetKey(client.args[1], "1")
-		client.ReplyInt(1)
+		n = 1
 	}
+	client.server.UpdateKey(client.args[1], strconv.FormatInt(n, 10))
+	client.ReplyInt(int(n))
 	client.dirty++
 }
 
