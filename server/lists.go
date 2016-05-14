@@ -207,3 +207,66 @@ func rpopCommand(client *Client) {
 		client.ReplyNull()
 	}
 }
+
+func lindexCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	sn, err := strconv.ParseInt(client.args[2], 10, 64)
+	if err != nil {
+		client.ReplyInvalidIntError()
+		return
+	}
+
+	l, ok := client.server.GetKeyList(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if l == nil {
+		client.ReplyNull()
+		return
+	}
+	llen := l.Len()
+	var start int
+	if sn < 0 {
+		start = llen + int(sn)
+	} else {
+		start = int(sn)
+	}
+
+	if start < 0 || start >= llen || llen == 0 {
+		client.ReplyNull()
+		return
+	}
+
+	var i int
+	var el *list.Element
+	if start > llen/2 {
+		// read from back
+		i = llen - 1
+		el = l.Back()
+		for el != nil {
+			if i == start {
+				client.ReplyBulk(el.Value.(string))
+				return
+			}
+			el = el.Prev()
+			i--
+		}
+	} else {
+		// read from front
+		i = 0
+		el = l.Front()
+		for el != nil {
+			if i == start {
+				client.ReplyBulk(el.Value.(string))
+				return
+			}
+			el = el.Next()
+			i++
+		}
+	}
+	client.ReplyNull()
+}
