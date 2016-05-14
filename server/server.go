@@ -13,11 +13,19 @@ import (
 )
 
 func (s *Server) commandTable() {
-	s.register("get", getCommand, "r")
-	s.register("set", setCommand, "w")
-	s.register("del", delCommand, "w")
-	s.register("flushdb", flushdbCommand, "w")
-	s.register("keys", keysCommand, "r")
+	// r - lock for reading.
+	// w - lock for writing.
+	// + - write to aof
+	s.register("get", getCommand, "r")            // Strings
+	s.register("set", setCommand, "w+")           // Strings
+	s.register("append", appendCommand, "w+")     // Strings
+	s.register("bitcount", bitcountCommand, "r")  // Strings
+	s.register("echo", echoCommand, "")           // Connection
+	s.register("ping", pingCommand, "")           // Connection
+	s.register("flushdb", flushdbCommand, "w+")   // Server
+	s.register("flushall", flushallCommand, "w+") // Server
+	s.register("del", delCommand, "w+")           // Keys
+	s.register("keys", keysCommand, "r")          // Keys
 }
 
 type Key struct {
@@ -32,6 +40,7 @@ func (key *Key) Less(item btree.Item) bool {
 type Command struct {
 	Write bool
 	Read  bool
+	AOF   bool
 	Func  func(client *Client)
 }
 
@@ -62,6 +71,10 @@ func (s *Server) register(commandName string, f func(client *Client), opts strin
 		case 'w':
 			cmd.Write = true
 			cmd.Read = false
+		case '+':
+			cmd.Write = true
+			cmd.Read = false
+			cmd.AOF = true
 		}
 	}
 	s.commands[commandName] = &cmd
@@ -134,8 +147,6 @@ func handleConn(conn net.Conn, server *Server) {
 		case "quit":
 			c.ReplyString("OK")
 			return
-		case "ping":
-			c.ReplyString("PONG")
 		default:
 			if cmd, ok := server.commands[command]; ok {
 				if cmd.Write {
@@ -144,8 +155,10 @@ func handleConn(conn net.Conn, server *Server) {
 					server.mu.RLock()
 				}
 				cmd.Func(c)
-				if cmd.Write {
+				if cmd.AOF {
 					server.aofbuf.Write(c.raw)
+				}
+				if cmd.Write {
 					server.mu.Unlock()
 				} else if cmd.Read {
 					server.mu.RUnlock()
@@ -174,4 +187,23 @@ func handleConn(conn net.Conn, server *Server) {
 			}
 		}
 	}
+}
+
+/* Commands */
+func flushdbCommand(client *Client) {
+	if len(client.args) != 1 {
+		client.ReplyAritryError()
+		return
+	}
+	client.server.keys = btree.New(16)
+	client.ReplyString("OK")
+}
+
+func flushallCommand(client *Client) {
+	if len(client.args) != 1 {
+		client.ReplyAritryError()
+		return
+	}
+	client.server.keys = btree.New(16)
+	client.ReplyString("OK")
 }

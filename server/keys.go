@@ -2,33 +2,6 @@ package server
 
 import "github.com/google/btree"
 
-func getCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
-		return
-	}
-	key, ok := client.server.GetKey(client.args[1])
-	if !ok {
-		client.ReplyNull()
-		return
-	}
-	switch s := key.(type) {
-	default:
-		client.ReplyTypeError()
-	case string:
-		client.ReplyBulk(s)
-	}
-}
-
-func setCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
-		return
-	}
-	client.server.SetKey(client.args[1], client.args[2])
-	client.ReplyString("OK")
-}
-
 func delCommand(client *Client) {
 	if len(client.args) < 2 {
 		client.ReplyAritryError()
@@ -41,15 +14,6 @@ func delCommand(client *Client) {
 		}
 	}
 	client.ReplyInt(count)
-}
-
-func flushdbCommand(client *Client) {
-	if len(client.args) != 1 {
-		client.ReplyAritryError()
-		return
-	}
-	client.server.keys = btree.New(16)
-	client.ReplyString("OK")
 }
 
 func keysCommand(client *Client) {
