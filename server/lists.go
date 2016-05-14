@@ -157,3 +157,53 @@ func llenCommand(client *Client) {
 	}
 	client.ReplyInt(l.Len())
 }
+
+func lpopCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	l, ok := client.server.GetKeyList(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if l == nil {
+		client.ReplyNull()
+	} else if l.Len() > 0 {
+		el := l.Front()
+		l.Remove(el)
+		if l.Len() == 0 {
+			client.server.DelKey(client.args[1])
+		}
+		client.ReplyBulk(el.Value.(string))
+		client.dirty++
+	} else {
+		client.ReplyNull()
+	}
+}
+
+func rpopCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	l, ok := client.server.GetKeyList(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if l == nil {
+		client.ReplyNull()
+	} else if l.Len() > 0 {
+		el := l.Back()
+		l.Remove(el)
+		if l.Len() == 0 {
+			client.server.DelKey(client.args[1])
+		}
+		client.ReplyBulk(el.Value.(string))
+		client.dirty++
+	} else {
+		client.ReplyNull()
+	}
+}
