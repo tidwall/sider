@@ -29,6 +29,7 @@ func (s *Server) commandTable() {
 	s.register("decrby", decrbyCommand, "w+")    // Strings
 	s.register("mget", mgetCommand, "r")         // Strings
 	s.register("setnx", setnxCommand, "w+")      // Strings
+	s.register("mset", msetCommand, "w+")        // Strings
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection

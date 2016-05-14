@@ -122,6 +122,7 @@ func setCommand(client *Client) {
 	client.ReplyString("OK")
 	client.dirty++
 }
+
 func setnxCommand(client *Client) {
 	if len(client.args) != 3 {
 		client.ReplyAritryError()
@@ -135,6 +136,18 @@ func setnxCommand(client *Client) {
 	client.server.SetKey(client.args[1], client.args[2])
 	client.ReplyInt(1)
 	client.dirty++
+}
+
+func msetCommand(client *Client) {
+	if len(client.args) < 3 || (len(client.args)-1)%2 != 0 {
+		client.ReplyAritryError()
+		return
+	}
+	for i := 1; i < len(client.args); i += 2 {
+		client.server.SetKey(client.args[i+0], client.args[i+1])
+		client.dirty++
+	}
+	client.ReplyString("OK")
 }
 
 func appendCommand(client *Client) {
