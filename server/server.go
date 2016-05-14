@@ -34,6 +34,7 @@ func (s *Server) commandTable() {
 	s.register("randomkey", randomkeyCommand, "r") // Keys
 	s.register("exists", existsCommand, "r")       // Keys
 	s.register("expire", expireCommand, "w+")      // Keys
+	s.register("ttl", ttlCommand, "r")             // Keys
 }
 
 type Key struct {
@@ -102,6 +103,18 @@ func (s *Server) GetKey(name string) (interface{}, bool) {
 		return nil, false
 	}
 	return key.Value, true
+}
+
+func (s *Server) GetKeyExpires(name string) (interface{}, time.Time, bool) {
+	item := s.keys.Get(&Key{Name: name})
+	if item == nil {
+		return nil, time.Time{}, false
+	}
+	key := item.(*Key)
+	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
+		return nil, time.Time{}, false
+	}
+	return key.Value, key.Expires, true
 }
 
 func (s *Server) SetKey(name string, value interface{}) {

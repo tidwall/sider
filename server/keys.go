@@ -167,3 +167,17 @@ func expireCommand(client *Client) {
 		client.ReplyInt(0)
 	}
 }
+func ttlCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	_, expires, ok := client.server.GetKeyExpires(client.args[1])
+	if !ok {
+		client.ReplyInt(-2)
+	} else if expires.IsZero() {
+		client.ReplyInt(-1)
+	} else {
+		client.ReplyInt(int(expires.Sub(time.Now()) / time.Second))
+	}
+}
