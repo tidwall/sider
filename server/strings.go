@@ -27,6 +27,7 @@ func setCommand(client *Client) {
 	}
 	client.server.SetKey(client.args[1], client.args[2])
 	client.ReplyString("OK")
+	client.dirty++
 }
 func appendCommand(client *Client) {
 	if len(client.args) != 3 {
@@ -37,6 +38,7 @@ func appendCommand(client *Client) {
 	if !ok {
 		client.server.SetKey(client.args[1], client.args[2])
 		client.ReplyInt(len(client.args[2]))
+		client.dirty++
 	} else {
 		switch s := key.(type) {
 		default:
@@ -45,6 +47,7 @@ func appendCommand(client *Client) {
 			s += client.args[2]
 			client.server.SetKey(client.args[1], s)
 			client.ReplyInt(len(s))
+			client.dirty++
 		}
 	}
 }

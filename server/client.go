@@ -10,6 +10,7 @@ type Client struct {
 	server *Server   // shared server
 	args   []string  // command arguments
 	raw    []byte    // the raw command bytes
+	dirty  int       // the number of changes made by the client
 }
 
 func (c *Client) ReplyString(s string) {

@@ -1,6 +1,11 @@
 package server
 
-import "github.com/google/btree"
+import (
+	"strconv"
+	"time"
+
+	"github.com/google/btree"
+)
 
 func delCommand(client *Client) {
 	if len(client.args) < 2 {
@@ -11,9 +16,11 @@ func delCommand(client *Client) {
 	for i := 1; i < len(client.args); i++ {
 		if _, ok := client.server.DelKey(client.args[i]); ok {
 			count++
+			client.dirty++
 		}
 	}
 	client.ReplyInt(count)
+
 }
 
 func renameCommand(client *Client) {
@@ -29,6 +36,7 @@ func renameCommand(client *Client) {
 	client.server.DelKey(client.args[1])
 	client.server.SetKey(client.args[2], key)
 	client.ReplyString("OK")
+	client.dirty++
 }
 
 func renamenxCommand(client *Client) {
@@ -49,6 +57,7 @@ func renamenxCommand(client *Client) {
 	client.server.DelKey(client.args[1])
 	client.server.SetKey(client.args[2], key)
 	client.ReplyInt(1)
+	client.dirty++
 }
 
 func keysCommand(client *Client) {
@@ -140,4 +149,21 @@ func existsCommand(client *Client) {
 		}
 	}
 	client.ReplyInt(count)
+}
+func expireCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	seconds, err := strconv.ParseInt(client.args[2], 10, 64)
+	if err != nil {
+		client.ReplyError("value is not an integer or out of range")
+		return
+	}
+	if client.server.Expire(client.args[1], time.Now().Add(time.Duration(seconds)*time.Second)) {
+		client.ReplyInt(1)
+		client.dirty++
+	} else {
+		client.ReplyInt(0)
+	}
 }

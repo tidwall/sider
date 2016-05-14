@@ -6,8 +6,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 )
@@ -31,11 +33,13 @@ func (s *Server) commandTable() {
 	s.register("type", typeCommand, "r")           // Keys
 	s.register("randomkey", randomkeyCommand, "r") // Keys
 	s.register("exists", existsCommand, "r")       // Keys
+	s.register("expire", expireCommand, "w+")      // Keys
 }
 
 type Key struct {
-	Name  string
-	Value interface{}
+	Name    string
+	Expires time.Time
+	Value   interface{}
 }
 
 func (key *Key) Less(item btree.Item) bool {
@@ -54,14 +58,17 @@ type Config struct {
 }
 
 type Server struct {
-	mu        sync.RWMutex
-	commands  map[string]*Command
-	keys      *btree.BTree
-	config    Config
-	aof       *os.File
-	aofbuf    bytes.Buffer
-	aofmu     sync.Mutex
-	aofclosed bool
+	mu          sync.RWMutex
+	commands    map[string]*Command
+	keys        *btree.BTree
+	config      Config
+	aof         *os.File
+	aofbuf      bytes.Buffer
+	aofmu       sync.Mutex
+	aofclosed   bool
+	follower    bool
+	expires     map[string]time.Time
+	expiresdone bool
 }
 
 func (s *Server) register(commandName string, f func(client *Client), opts string) {
@@ -90,28 +97,105 @@ func (s *Server) GetKey(name string) (interface{}, bool) {
 	if item == nil {
 		return nil, false
 	}
-	return item.(*Key).Value, true
+	key := item.(*Key)
+	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
+		return nil, false
+	}
+	return key.Value, true
 }
 
 func (s *Server) SetKey(name string, value interface{}) {
+	delete(s.expires, name)
 	s.keys.ReplaceOrInsert(&Key{Name: name, Value: value})
 }
+
 func (s *Server) DelKey(name string) (interface{}, bool) {
 	item := s.keys.Delete(&Key{Name: name})
 	if item == nil {
 		return nil, false
 	}
+	key := item.(*Key)
+	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
+		return nil, false
+	}
+	delete(s.expires, name)
 	return item.(*Key).Value, true
+}
+
+func (s *Server) Expire(name string, when time.Time) bool {
+	item := s.keys.Get(&Key{Name: name})
+	if item == nil {
+		return false
+	}
+	key := item.(*Key)
+	key.Expires = when
+	s.expires[name] = when
+	return true
+}
+
+// startExpireLoop runs a background routine which watches for exipred keys
+// and forces their removal from the database. 100ms resolution.
+func (s *Server) startExpireLoop() {
+	go func() {
+		t := time.NewTicker(time.Second / 10)
+		defer t.Stop()
+		for range t.C {
+			s.mu.Lock()
+			if s.expiresdone {
+				s.mu.Unlock()
+				return
+			}
+			s.forceDeleteExpires()
+			s.mu.Unlock()
+		}
+	}()
+}
+
+func (s *Server) forceDeleteExpires() {
+	if len(s.expires) == 0 || s.follower {
+		return
+	}
+	now := time.Now()
+	var aofbuf bytes.Buffer
+	for key, expires := range s.expires {
+		if now.After(expires) {
+			s.keys.Delete(&Key{Name: key})
+			aofbuf.WriteString("*2\r\n$3\r\ndel\r\n$")
+			aofbuf.WriteString(strconv.FormatInt(int64(len(key)), 10))
+			aofbuf.WriteString("\r\n")
+			aofbuf.WriteString(key)
+			aofbuf.WriteString("\r\n")
+			delete(s.expires, key)
+		}
+	}
+	if aofbuf.Len() > 0 {
+		s.aofmu.Lock()
+		if _, err := s.aof.Write(aofbuf.Bytes()); err != nil {
+			panic(err)
+		}
+		s.aofmu.Unlock()
+	}
+}
+
+// stopExpireLoop will force delete all expires and stop the background routine
+func (s *Server) stopExpireLoop() {
+	s.mu.Lock()
+	s.forceDeleteExpires()
+	s.expiresdone = true
+	s.mu.Unlock()
 }
 
 func Start(addr string) {
 	s := &Server{
 		commands: make(map[string]*Command),
 		keys:     btree.New(16),
+		expires:  make(map[string]time.Time),
 	}
 	s.commandTable()
 	s.openAOF()
 	defer s.closeAOF()
+	s.startExpireLoop()
+	defer s.stopExpireLoop()
 
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -160,8 +244,11 @@ func handleConn(conn net.Conn, server *Server) {
 					server.mu.RLock()
 				}
 				cmd.Func(c)
-				if cmd.AOF {
-					server.aofbuf.Write(c.raw)
+				if c.dirty > 0 {
+					if cmd.AOF {
+						server.aofbuf.Write(c.raw)
+					}
+					c.dirty = 0
 				}
 				if cmd.Write {
 					server.mu.Unlock()
