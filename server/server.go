@@ -33,6 +33,7 @@ func (s *Server) commandTable() {
 	s.register("msetnx", msetnxCommand, "w+")    // Strings
 
 	s.register("lpush", lpushCommand, "w+") // Lists
+	s.register("rpush", rpushCommand, "w+") // Lists
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
