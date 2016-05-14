@@ -1,6 +1,10 @@
 package server
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 func getCommand(client *Client) {
 	if len(client.args) != 2 {
@@ -114,11 +118,69 @@ func genericIncrbyCommand(client *Client, delta int64) {
 }
 
 func setCommand(client *Client) {
-	if len(client.args) != 3 {
+	if len(client.args) < 3 {
 		client.ReplyAritryError()
 		return
 	}
+	var nx, xx bool
+	var ex, px time.Time
+	var expires bool
+	var when time.Time
+	for i := 3; i < len(client.args); i++ {
+		switch strings.ToLower(client.args[i]) {
+		case "nx":
+			if xx {
+				client.ReplySyntaxError()
+				return
+			}
+			nx = true
+		case "xx":
+			if nx {
+				client.ReplySyntaxError()
+				return
+			}
+			xx = true
+		case "ex":
+			if !px.IsZero() || i == len(client.args)-1 {
+				client.ReplySyntaxError()
+				return
+			}
+			i++
+			n, err := strconv.ParseInt(client.args[i], 10, 64)
+			if err != nil {
+				client.ReplySyntaxError()
+				return
+			}
+			ex = time.Now().Add(time.Duration(n) * time.Second)
+			expires = true
+			when = ex
+		case "px":
+			if !ex.IsZero() || i == len(client.args)-1 {
+				client.ReplySyntaxError()
+				return
+			}
+			i++
+			n, err := strconv.ParseInt(client.args[i], 10, 64)
+			if err != nil {
+				client.ReplySyntaxError()
+				return
+			}
+			px = time.Now().Add(time.Duration(n) * time.Millisecond)
+			expires = true
+			when = px
+		}
+	}
+	if nx || xx {
+		_, ok := client.server.GetKey(client.args[1])
+		if (ok && nx) || (!ok && xx) {
+			client.ReplyNull()
+			return
+		}
+	}
 	client.server.SetKey(client.args[1], client.args[2])
+	if expires {
+		client.server.Expire(client.args[1], when)
+	}
 	client.ReplyString("OK")
 	client.dirty++
 }

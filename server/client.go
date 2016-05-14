@@ -37,3 +37,6 @@ func (c *Client) ReplyInt(n int) {
 func (c *Client) ReplyMultiBulkLen(n int) {
 	io.WriteString(c.wr, "*"+strconv.FormatInt(int64(n), 10)+"\r\n")
 }
+func (c *Client) ReplySyntaxError() {
+	io.WriteString(c.wr, "-ERR syntax error\r\n")
+}
