@@ -122,6 +122,21 @@ func setCommand(client *Client) {
 	client.ReplyString("OK")
 	client.dirty++
 }
+func setnxCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	_, ok := client.server.GetKey(client.args[1])
+	if ok {
+		client.ReplyInt(0)
+		return
+	}
+	client.server.SetKey(client.args[1], client.args[2])
+	client.ReplyInt(1)
+	client.dirty++
+}
+
 func appendCommand(client *Client) {
 	if len(client.args) != 3 {
 		client.ReplyAritryError()
