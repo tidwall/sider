@@ -40,3 +40,6 @@ func (c *Client) ReplyMultiBulkLen(n int) {
 func (c *Client) ReplySyntaxError() {
 	io.WriteString(c.wr, "-ERR syntax error\r\n")
 }
+func (c *Client) ReplyInvalidIntError() {
+	io.WriteString(c.wr, "-ERR value is not an integer or out of range\r\n")
+}

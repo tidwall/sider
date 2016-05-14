@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"container/list"
 	"log"
 	"net"
 	"os"
@@ -32,8 +33,9 @@ func (s *Server) commandTable() {
 	s.register("mset", msetCommand, "w+")        // Strings
 	s.register("msetnx", msetnxCommand, "w+")    // Strings
 
-	s.register("lpush", lpushCommand, "w+") // Lists
-	s.register("rpush", rpushCommand, "w+") // Lists
+	s.register("lpush", lpushCommand, "w+")  // Lists
+	s.register("rpush", rpushCommand, "w+")  // Lists
+	s.register("lrange", lrangeCommand, "r") // Lists
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
@@ -129,6 +131,24 @@ func (s *Server) GetKeyExpires(name string) (interface{}, time.Time, bool) {
 		return nil, time.Time{}, false
 	}
 	return key.Value, key.Expires, true
+}
+
+func (s *Server) GetKeyList(name string, create bool) (*list.List, bool) {
+	key, ok := s.GetKey(name)
+	if ok {
+		switch v := key.(type) {
+		default:
+			return nil, false
+		case *list.List:
+			return v, true
+		}
+	}
+	if create {
+		l := list.New()
+		s.SetKey(name, l)
+		return l, true
+	}
+	return nil, true
 }
 
 func (s *Server) SetKey(name string, value interface{}) {
