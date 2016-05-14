@@ -15,11 +15,9 @@ type Client struct {
 func (c *Client) ReplyString(s string) {
 	io.WriteString(c.wr, "+"+s+"\r\n")
 }
-
 func (c *Client) ReplyError(s string) {
 	io.WriteString(c.wr, "-ERR "+s+"\r\n")
 }
-
 func (c *Client) ReplyAritryError() {
 	io.WriteString(c.wr, "-ERR wrong number of arguments for '"+c.args[0]+"'\r\n")
 }
@@ -34,4 +32,7 @@ func (c *Client) ReplyNull() {
 }
 func (c *Client) ReplyInt(n int) {
 	io.WriteString(c.wr, ":"+strconv.FormatInt(int64(n), 10)+"\r\n")
+}
+func (c *Client) ReplyMultiBulkLen(n int) {
+	io.WriteString(c.wr, "*"+strconv.FormatInt(int64(n), 10)+"\r\n")
 }
