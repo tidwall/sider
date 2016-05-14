@@ -15,18 +15,20 @@ import (
 )
 
 func (s *Server) commandTable() {
-	// r - lock for reading.
-	// w - lock for writing.
-	// + - write to aof
-	s.register("get", getCommand, "r")             // Strings
-	s.register("getset", getsetCommand, "w+")      // Strings
-	s.register("set", setCommand, "w+")            // Strings
-	s.register("append", appendCommand, "w+")      // Strings
-	s.register("bitcount", bitcountCommand, "r")   // Strings
-	s.register("incr", incrCommand, "w+")          // Strings
-	s.register("incrby", incrbyCommand, "w+")      // Strings
-	s.register("decr", decrCommand, "w+")          // Strings
-	s.register("decrby", decrbyCommand, "w+")      // Strings
+	// "r" lock for reading.
+	// "w" lock for writing.
+	// "+" write to aof
+	s.register("get", getCommand, "r")           // Strings
+	s.register("getset", getsetCommand, "w+")    // Strings
+	s.register("set", setCommand, "w+")          // Strings
+	s.register("append", appendCommand, "w+")    // Strings
+	s.register("bitcount", bitcountCommand, "r") // Strings
+	s.register("incr", incrCommand, "w+")        // Strings
+	s.register("incrby", incrbyCommand, "w+")    // Strings
+	s.register("decr", decrCommand, "w+")        // Strings
+	s.register("decrby", decrbyCommand, "w+")    // Strings
+	s.register("mget", mgetCommand, "r")         // Strings
+
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
 	s.register("flushdb", flushdbCommand, "w+")    // Server

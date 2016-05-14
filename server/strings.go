@@ -199,3 +199,21 @@ func bitcountCommand(client *Client) {
 		client.ReplyInt(count)
 	}
 }
+
+func mgetCommand(client *Client) {
+	if len(client.args) < 2 {
+		client.ReplyAritryError()
+		return
+	}
+	client.ReplyMultiBulkLen(len(client.args) - 1)
+	for i := 1; i < len(client.args); i++ {
+		key, ok := client.server.GetKey(client.args[i])
+		if !ok {
+			client.ReplyNull()
+		} else if s, ok := key.(string); ok {
+			client.ReplyBulk(s)
+		} else {
+			client.ReplyNull()
+		}
+	}
+}
