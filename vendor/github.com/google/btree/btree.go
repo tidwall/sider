@@ -50,8 +50,10 @@ package btree
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Item represents a single object in the tree.
@@ -421,13 +423,13 @@ func (t *BTree) newNode() (n *node) {
 
 func (t *BTree) freeNode(n *node) {
 	if len(t.freelist) < cap(t.freelist) {
-    for i := range n.items {
-      n.items[i] = nil  // clear to allow GC
-    }
+		for i := range n.items {
+			n.items[i] = nil // clear to allow GC
+		}
 		n.items = n.items[:0]
-    for i := range n.children {
-      n.children[i] = nil  // clear to allow GC
-    }
+		for i := range n.children {
+			n.children[i] = nil // clear to allow GC
+		}
 		n.children = n.children[:0]
 		t.freelist = append(t.freelist, n)
 	}
@@ -568,4 +570,49 @@ type Int int
 // Less returns true if int(a) < int(b).
 func (a Int) Less(b Item) bool {
 	return a < b.(Int)
+}
+
+// Random finds a random item in the tree, returning it. It returns nil if
+// the tree is empty. The algorithm starts at the root node.
+//  - Are there children nodes?
+//    - no: return random item
+//    - yes: pick a number between 0-3.
+//      - 0,1,2: randomly select a child node. Goto first step.
+//      - 3: return random item
+// If an item is not found but the tree is not empty, then just return the first
+// item. this should not happen unless the tree is corrupted.
+func (t *BTree) Random() Item {
+	if t.root == nil {
+		return nil
+	}
+	rand.Seed(time.Now().UnixNano())
+	var a Item
+	n := t.root
+	for {
+		if len(n.children) == 0 {
+			if len(n.items) == 0 {
+				return nil
+			}
+			a = n.items[rand.Int()%len(n.items)]
+			break
+		}
+		if len(n.items) == 0 {
+			n = n.children[rand.Int()%len(n.children)]
+		} else {
+			r := rand.Int() % 4
+			if r < 3 {
+				n = n.children[rand.Int()%len(n.children)]
+			} else {
+				a = n.items[rand.Int()%len(n.items)]
+				break
+			}
+		}
+	}
+	if a == nil && t.length > 0 {
+		t.Ascend(func(item Item) bool {
+			a = item
+			return false
+		})
+	}
+	return a
 }

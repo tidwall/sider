@@ -16,6 +16,41 @@ func delCommand(client *Client) {
 	client.ReplyInt(count)
 }
 
+func renameCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	key, ok := client.server.GetKey(client.args[1])
+	if !ok {
+		client.ReplyError("no such key")
+		return
+	}
+	client.server.DelKey(client.args[1])
+	client.server.SetKey(client.args[2], key)
+	client.ReplyString("OK")
+}
+
+func renamenxCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	key, ok := client.server.GetKey(client.args[1])
+	if !ok {
+		client.ReplyError("no such key")
+		return
+	}
+	_, ok = client.server.GetKey(client.args[2])
+	if ok {
+		client.ReplyInt(0)
+		return
+	}
+	client.server.DelKey(client.args[1])
+	client.server.SetKey(client.args[2], key)
+	client.ReplyInt(1)
+}
+
 func keysCommand(client *Client) {
 	if len(client.args) != 2 {
 		client.ReplyAritryError()
@@ -60,4 +95,35 @@ func keysCommand(client *Client) {
 	for _, key := range keys {
 		client.ReplyBulk(key)
 	}
+}
+
+func typeCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	key, ok := client.server.GetKey(client.args[1])
+	if !ok {
+		client.ReplyString("none")
+		return
+	}
+	switch key.(type) {
+	default:
+		client.ReplyString("unknown") // should not be reached
+	case string:
+		client.ReplyString("string")
+	}
+}
+
+func randomkeyCommand(client *Client) {
+	if len(client.args) != 1 {
+		client.ReplyAritryError()
+		return
+	}
+	item := client.server.keys.Random()
+	if item == nil {
+		client.ReplyNull()
+		return
+	}
+	client.ReplyString(item.(*Key).Name)
 }

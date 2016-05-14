@@ -16,16 +16,20 @@ func (s *Server) commandTable() {
 	// r - lock for reading.
 	// w - lock for writing.
 	// + - write to aof
-	s.register("get", getCommand, "r")            // Strings
-	s.register("set", setCommand, "w+")           // Strings
-	s.register("append", appendCommand, "w+")     // Strings
-	s.register("bitcount", bitcountCommand, "r")  // Strings
-	s.register("echo", echoCommand, "")           // Connection
-	s.register("ping", pingCommand, "")           // Connection
-	s.register("flushdb", flushdbCommand, "w+")   // Server
-	s.register("flushall", flushallCommand, "w+") // Server
-	s.register("del", delCommand, "w+")           // Keys
-	s.register("keys", keysCommand, "r")          // Keys
+	s.register("get", getCommand, "r")             // Strings
+	s.register("set", setCommand, "w+")            // Strings
+	s.register("append", appendCommand, "w+")      // Strings
+	s.register("bitcount", bitcountCommand, "r")   // Strings
+	s.register("echo", echoCommand, "")            // Connection
+	s.register("ping", pingCommand, "")            // Connection
+	s.register("flushdb", flushdbCommand, "w+")    // Server
+	s.register("flushall", flushallCommand, "w+")  // Server
+	s.register("del", delCommand, "w+")            // Keys
+	s.register("keys", keysCommand, "r")           // Keys
+	s.register("rename", renameCommand, "w+")      // Keys
+	s.register("renamenx", renamenxCommand, "w+")  // Keys
+	s.register("type", typeCommand, "r")           // Keys
+	s.register("randomkey", randomkeyCommand, "r") // Keys
 }
 
 type Key struct {
