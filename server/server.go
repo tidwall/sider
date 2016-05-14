@@ -30,6 +30,7 @@ func (s *Server) commandTable() {
 	s.register("renamenx", renamenxCommand, "w+")  // Keys
 	s.register("type", typeCommand, "r")           // Keys
 	s.register("randomkey", randomkeyCommand, "r") // Keys
+	s.register("exists", existsCommand, "r")       // Keys
 }
 
 type Key struct {

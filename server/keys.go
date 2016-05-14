@@ -125,5 +125,19 @@ func randomkeyCommand(client *Client) {
 		client.ReplyNull()
 		return
 	}
-	client.ReplyString(item.(*Key).Name)
+	client.ReplyBulk(item.(*Key).Name)
+}
+
+func existsCommand(client *Client) {
+	if len(client.args) == 1 {
+		client.ReplyAritryError()
+		return
+	}
+	var count int
+	for i := 1; i < len(client.args); i++ {
+		if _, ok := client.server.GetKey(client.args[i]); ok {
+			count++
+		}
+	}
+	client.ReplyInt(count)
 }
