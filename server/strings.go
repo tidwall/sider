@@ -15,9 +15,63 @@ func getCommand(client *Client) {
 	switch s := key.(type) {
 	default:
 		client.ReplyTypeError()
+		return
 	case string:
 		client.ReplyBulk(s)
 	}
+}
+
+func getsetCommand(client *Client) {
+	if len(client.args) != 3 {
+		client.ReplyAritryError()
+		return
+	}
+	var res string
+	key, ok := client.server.GetKey(client.args[1])
+	if ok {
+		switch s := key.(type) {
+		default:
+			client.ReplyTypeError()
+			return
+		case string:
+			res = s
+		}
+	}
+	client.server.SetKey(client.args[1], client.args[2])
+	if !ok {
+		client.ReplyNull()
+	} else {
+		client.ReplyBulk(res)
+	}
+	client.dirty++
+}
+
+func incrCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	key, ok := client.server.GetKey(client.args[1])
+	if ok {
+		switch s := key.(type) {
+		default:
+			client.ReplyTypeError()
+			return
+		case string:
+			n, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				client.ReplyTypeError()
+				return
+			}
+			n++
+			client.server.UpdateKey(client.args[1], strconv.FormatInt(n, 10))
+			client.ReplyInt(int(n))
+		}
+	} else {
+		client.server.SetKey(client.args[1], "1")
+		client.ReplyInt(1)
+	}
+	client.dirty++
 }
 
 func setCommand(client *Client) {
@@ -39,16 +93,17 @@ func appendCommand(client *Client) {
 		client.server.SetKey(client.args[1], client.args[2])
 		client.ReplyInt(len(client.args[2]))
 		client.dirty++
-	} else {
-		switch s := key.(type) {
-		default:
-			client.ReplyTypeError()
-		case string:
-			s += client.args[2]
-			client.server.SetKey(client.args[1], s)
-			client.ReplyInt(len(s))
-			client.dirty++
-		}
+		return
+	}
+	switch s := key.(type) {
+	default:
+		client.ReplyTypeError()
+		return
+	case string:
+		s += client.args[2]
+		client.server.SetKey(client.args[1], s)
+		client.ReplyInt(len(s))
+		client.dirty++
 	}
 }
 
@@ -77,6 +132,7 @@ func bitcountCommand(client *Client) {
 	switch s := key.(type) {
 	default:
 		client.ReplyTypeError()
+		return
 	case string:
 		var count int
 		if all {

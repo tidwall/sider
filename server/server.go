@@ -19,9 +19,11 @@ func (s *Server) commandTable() {
 	// w - lock for writing.
 	// + - write to aof
 	s.register("get", getCommand, "r")             // Strings
+	s.register("getset", getsetCommand, "w+")      // Strings
 	s.register("set", setCommand, "w+")            // Strings
 	s.register("append", appendCommand, "w+")      // Strings
 	s.register("bitcount", bitcountCommand, "r")   // Strings
+	s.register("incr", incrCommand, "w+")          // Strings
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
 	s.register("flushdb", flushdbCommand, "w+")    // Server
@@ -35,6 +37,7 @@ func (s *Server) commandTable() {
 	s.register("exists", existsCommand, "r")       // Keys
 	s.register("expire", expireCommand, "w+")      // Keys
 	s.register("ttl", ttlCommand, "r")             // Keys
+
 }
 
 type Key struct {
@@ -120,6 +123,13 @@ func (s *Server) GetKeyExpires(name string) (interface{}, time.Time, bool) {
 func (s *Server) SetKey(name string, value interface{}) {
 	delete(s.expires, name)
 	s.keys.ReplaceOrInsert(&Key{Name: name, Value: value})
+}
+
+func (s *Server) UpdateKey(name string, value interface{}) {
+	item := s.keys.Get(&Key{Name: name})
+	if item != nil {
+		item.(*Key).Value = value
+	}
 }
 
 func (s *Server) DelKey(name string) (interface{}, bool) {
