@@ -140,3 +140,20 @@ func lrangeCommand(client *Client) {
 		client.ReplyBulk(s)
 	}
 }
+
+func llenCommand(client *Client) {
+	if len(client.args) != 2 {
+		client.ReplyAritryError()
+		return
+	}
+	l, ok := client.server.GetKeyList(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if l == nil {
+		client.ReplyInt(0)
+		return
+	}
+	client.ReplyInt(l.Len())
+}
