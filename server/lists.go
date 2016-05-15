@@ -403,3 +403,74 @@ func lsetCommand(client *Client) {
 	}
 	client.ReplyError("index out of range")
 }
+
+func ltrimCommand(client *Client) {
+	if len(client.args) != 4 {
+		client.ReplyAritryError()
+		return
+	}
+	sn, err := strconv.ParseInt(client.args[2], 10, 64)
+	if err != nil {
+		client.ReplyInvalidIntError()
+		return
+	}
+	en, err := strconv.ParseInt(client.args[3], 10, 64)
+	if err != nil {
+		client.ReplyInvalidIntError()
+		return
+	}
+
+	l, ok := client.server.GetKeyList(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if l == nil {
+		client.ReplyString("OK")
+		return
+	}
+
+	llen := l.Len()
+
+	var start, stop int
+	if sn < 0 {
+		start = llen + int(sn)
+	} else {
+		start = int(sn)
+	}
+	if en < 0 {
+		stop = llen + int(en)
+	} else {
+		stop = int(en)
+	}
+
+	var i int
+	var el *list.Element
+	// delete from front
+	i = 0
+	el = l.Front()
+	for el != nil {
+		if i >= start {
+			break
+		}
+		next := el.Next()
+		l.Remove(el)
+		client.dirty++
+		el = next
+		i++
+	}
+	// delete from back
+	i = l.Len() - 1
+	el = l.Back()
+	for el != nil {
+		if i < stop-1 {
+			break
+		}
+		prev := el.Prev()
+		l.Remove(el)
+		client.dirty++
+		el = prev
+		i--
+	}
+	client.ReplyString("OK")
+}

@@ -42,6 +42,7 @@ func (s *Server) commandTable() {
 	s.register("lindex", lindexCommand, "r") // Lists
 	s.register("lrem", lremCommand, "w+")    // Lists
 	s.register("lset", lsetCommand, "w+")    // Lists
+	s.register("ltrim", ltrimCommand, "w+")  // Lists
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
