@@ -68,6 +68,18 @@ func (s1 *Set) Inter(s2 *Set) *Set {
 	}
 	return s3
 }
+
+func (s1 *Set) Union(s2 *Set) *Set {
+	s3 := NewSet()
+	for v := range s1.m {
+		s3.m[v] = true
+	}
+	for v := range s2.m {
+		s3.m[v] = true
+	}
+	return s3
+}
+
 func (s *Set) popRand(count int, pop bool) []string {
 	many := false
 	if count < 0 {
@@ -194,52 +206,85 @@ func sismembersCommand(client *Client) {
 	}
 }
 
-func sdiffinterGenericCommand(client *Client, diff bool) {
-	if len(client.args) < 2 {
+func sdiffinterunionGenericCommand(client *Client, diff, union bool, store bool) {
+	if (!store && len(client.args) < 2) || (store && len(client.args) < 3) {
 		client.ReplyAritryError()
 		return
 	}
+	basei := 1
+	if store {
+		basei = 2
+	}
 	var st *Set
-	for i := 1; i < len(client.args); i++ {
+	for i := basei; i < len(client.args); i++ {
 		stt, ok := client.server.GetKeySet(client.args[i], false)
 		if !ok {
 			client.ReplyTypeError()
 			return
 		}
 		if stt == nil {
-			if diff {
+			if diff || union {
 				continue
 			} else {
 				st = nil
 				break
 			}
 		}
-		if i == 1 {
+		if st == nil {
 			st = stt
 		} else {
 			if diff {
 				st = st.Diff(stt)
+			} else if union {
+				st = st.Union(stt)
 			} else {
 				st = st.Inter(stt)
 			}
 		}
 	}
-	if st == nil {
-		client.ReplyMultiBulkLen(0)
-		return
+	if store {
+		if st == nil || st.Len() == 0 {
+			_, ok := client.server.DelKey(client.args[1])
+			if ok {
+				client.dirty++
+			}
+			client.ReplyInt(0)
+		} else {
+			client.server.SetKey(client.args[1], st)
+			client.dirty++
+			client.ReplyInt(st.Len())
+		}
+	} else {
+		if st == nil {
+			client.ReplyMultiBulkLen(0)
+			return
+		}
+		client.ReplyMultiBulkLen(st.Len())
+		st.Ascend(func(s string) bool {
+			client.ReplyBulk(s)
+			return true
+		})
 	}
-	client.ReplyMultiBulkLen(st.Len())
-	st.Ascend(func(s string) bool {
-		client.ReplyBulk(s)
-		return true
-	})
 }
 func sdiffCommand(client *Client) {
-	sdiffinterGenericCommand(client, true)
+	sdiffinterunionGenericCommand(client, true, false, false)
 }
 func sinterCommand(client *Client) {
-	sdiffinterGenericCommand(client, false)
+	sdiffinterunionGenericCommand(client, false, false, false)
 }
+func sunionCommand(client *Client) {
+	sdiffinterunionGenericCommand(client, false, true, false)
+}
+func sdiffstoreCommand(client *Client) {
+	sdiffinterunionGenericCommand(client, true, false, true)
+}
+func sinterstoreCommand(client *Client) {
+	sdiffinterunionGenericCommand(client, false, false, true)
+}
+func sunionstoreCommand(client *Client) {
+	sdiffinterunionGenericCommand(client, false, true, true)
+}
+
 func srandmemberpopGenericCommand(client *Client, pop bool) {
 	if len(client.args) < 2 || len(client.args) > 3 {
 		client.ReplyAritryError()
