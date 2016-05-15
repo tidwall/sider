@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -53,7 +54,7 @@ func (s *Server) loadAOF() {
 		}
 		c.args = args
 		c.raw = raw
-		if cmd, ok := s.commands[args[0]]; ok {
+		if cmd, ok := s.commands[strings.ToLower(args[0])]; ok {
 			cmd.Func(c)
 		} else {
 			c.ReplyError("unknown command '" + args[0] + "'")
