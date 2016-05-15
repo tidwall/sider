@@ -20,6 +20,7 @@ type CommandReader struct {
 	rbuf   []byte
 	buf    []byte
 	copied bool
+	args   []string
 }
 
 func NewCommandReader(rd io.Reader) *CommandReader {
@@ -46,7 +47,7 @@ func autoConvertArgsToMultiBulk(raw []byte, args []string, telnet, flush bool) (
 func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, err error) {
 	if len(rd.buf) > 0 {
 		// there is already data in the buffer, do we have enough to make a full command?
-		raw, args, telnet, err := readBufferedCommand(rd.buf)
+		raw, args, telnet, err := rd.readBufferedCommand(rd.buf)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -55,13 +56,19 @@ func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 			// clear out the buffer and return the command
 			// notify the caller that we should flush after this command.
 			rd.buf = nil
-			return autoConvertArgsToMultiBulk(raw, args, telnet, true)
+			if telnet {
+				return autoConvertArgsToMultiBulk(raw, args, telnet, true)
+			}
+			return raw, args, true, nil
 		}
 		if len(raw) > 0 {
 			// have a command, but there's still data in the buffer.
 			// notify the caller that we should flush *only* when there's copied data.
 			rd.buf = rd.buf[len(raw):]
-			return autoConvertArgsToMultiBulk(raw, args, telnet, rd.copied)
+			if telnet {
+				return autoConvertArgsToMultiBulk(raw, args, telnet, rd.copied)
+			}
+			return raw, args, rd.copied, nil
 		}
 		// only have a partial command, read more data
 	}
@@ -81,8 +88,7 @@ func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 	return rd.ReadCommand()
 }
 
-func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
-	var args []string
+func (rd *CommandReader) readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 	if data[0] != '*' {
 		return readBufferedTelnetCommand(data)
 	}
@@ -98,7 +104,18 @@ func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 			if n <= 0 {
 				return data[:i+1], []string{}, false, nil
 			}
-			args = make([]string, 0, n)
+
+			// grow the args array
+			if n > len(rd.args) {
+				nlen := len(rd.args)
+				if nlen == 0 {
+					nlen = 1
+				}
+				for n > nlen {
+					nlen *= 2
+				}
+				rd.args = make([]string, nlen)
+			}
 			i++
 			for j := 0; j < n; j++ {
 				if i == len(data) {
@@ -118,13 +135,13 @@ func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 							return nil, nil, false, &protocolError{"invalid bulk length"}
 						}
 						i++
-						if len(data)-i < int(n2+2) {
+						if len(data)-i < n2+2 {
 							return nil, nil, false, nil // more data
 						}
-						args = append(args, string(data[i:i+int(n2)]))
-						i += int(n2 + 2)
+						rd.args[j] = string(data[i : i+n2])
+						i += n2 + 2
 						if j == n-1 {
-							return data[:i], args, false, nil
+							return data[:i], rd.args[:n], false, nil
 						}
 						break
 					}
@@ -225,15 +242,15 @@ func atoi(s string) (int, error) {
 	return n, nil
 }
 
-func atoui(s string) (uint, error) {
+func atoui(s string) (int, error) {
 	if len(s) == 0 {
 		return 0, errors.New("invalid integer")
 	}
-	var n uint
+	var n int
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c >= '0' && c <= '9' {
-			n = n*10 + uint(s[i]-'0')
+			n = n*10 + int(s[i]-'0')
 		} else {
 			return 0, errors.New("invalid integer")
 		}
