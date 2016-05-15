@@ -86,6 +86,7 @@ func (key *Key) Less(item btree.Item) bool {
 }
 
 type Command struct {
+	Name  string
 	Write bool
 	Read  bool
 	AOF   bool
@@ -103,7 +104,6 @@ type Server struct {
 	config      Config
 	aof         *os.File
 	aofbuf      bytes.Buffer
-	aofmu       sync.Mutex
 	aofclosed   bool
 	follower    bool
 	expires     map[string]time.Time
@@ -112,6 +112,7 @@ type Server struct {
 
 func (s *Server) register(commandName string, f func(client *Client), opts string) {
 	var cmd Command
+	cmd.Name = commandName
 	cmd.Func = f
 	for _, c := range []byte(opts) {
 		switch c {
@@ -128,7 +129,8 @@ func (s *Server) register(commandName string, f func(client *Client), opts strin
 			cmd.AOF = true
 		}
 	}
-	s.commands[commandName] = &cmd
+	s.commands[strings.ToLower(commandName)] = &cmd
+	s.commands[strings.ToUpper(commandName)] = &cmd
 }
 
 func (s *Server) GetKey(name string) (interface{}, bool) {
@@ -265,11 +267,9 @@ func (s *Server) forceDeleteExpires() {
 		}
 	}
 	if aofbuf.Len() > 0 {
-		s.aofmu.Lock()
 		if _, err := s.aof.Write(aofbuf.Bytes()); err != nil {
 			panic(err)
 		}
-		s.aofmu.Unlock()
 	}
 }
 
@@ -308,69 +308,67 @@ func Start(addr string) {
 	}
 }
 
+func autoCase(command string) string {
+	cc := '?'
+	for i := 0; i < len(command); i++ {
+		c := command[i]
+		if c >= 'A' && c <= 'Z' {
+			if cc == '?' {
+				cc = 'U'
+			} else if cc == 'L' {
+				return strings.ToLower(command)
+			}
+		} else if c >= 'a' && c <= 'z' {
+			if cc == '?' {
+				cc = 'L'
+			} else if cc == 'U' {
+				return strings.ToLower(command)
+			}
+		}
+	}
+	return command
+}
+
 func handleConn(conn net.Conn, server *Server) {
 	defer conn.Close()
+	rd := &CommandReader{rd: conn, rbuf: make([]byte, 64*1024)}
 	wr := bufio.NewWriter(conn)
 	defer wr.Flush()
-	rd := &CommandReader{rd: conn, rbuf: make([]byte, 64*1024)}
 	c := &Client{wr: wr, server: server}
+	defer c.flushAOF()
+
+	var flush bool
+	var err error
 	for {
-		raw, args, flush, err := rd.ReadCommand()
+		c.raw, c.args, flush, err = rd.ReadCommand()
 		if err != nil {
 			if err, ok := err.(*protocolError); ok {
 				c.ReplyError(err.Error())
 			}
 			return
 		}
-		if len(args) == 0 {
+		if len(c.args) == 0 {
 			continue
 		}
-		c.args = args
-		c.raw = raw
-		command := strings.ToLower(args[0])
-		switch command {
-		case "quit":
-			c.ReplyString("OK")
-			return
-		default:
-			if cmd, ok := server.commands[command]; ok {
-				if cmd.Write {
-					//c.args = acopy(c.args)
-					server.mu.Lock()
-				} else if cmd.Read {
-					server.mu.RLock()
-				}
-				cmd.Func(c)
-				if c.dirty > 0 {
-					if cmd.AOF {
-						server.aofbuf.Write(c.raw)
-					}
-					c.dirty = 0
-				}
-				if cmd.Write {
-					server.mu.Unlock()
-				} else if cmd.Read {
-					server.mu.RUnlock()
-				}
-			} else {
-				c.ReplyError("unknown command '" + args[0] + "'")
+		command := autoCase(c.args[0])
+		if cmd, ok := server.commands[command]; ok {
+			server.mu.Lock()
+			cmd.Func(c)
+			if c.dirty > 0 && cmd.AOF {
+				server.aofbuf.Write(c.raw)
+			}
+			server.mu.Unlock()
+		} else {
+			switch command {
+			default:
+				c.ReplyError("unknown command '" + c.args[0] + "'")
+			case "quit":
+				c.ReplyString("OK")
+				return
 			}
 		}
 		if flush {
-			server.mu.Lock()
-			if server.aofbuf.Len() > 0 {
-				b := server.aofbuf.Bytes()
-				server.aofbuf.Reset()
-				server.mu.Unlock()
-				server.aofmu.Lock()
-				if _, err := server.aof.Write(b); err != nil {
-					panic(err)
-				}
-				server.aofmu.Unlock()
-			} else {
-				server.mu.Unlock()
-			}
-
+			c.flushAOF()
 			if err := wr.Flush(); err != nil {
 				return
 			}

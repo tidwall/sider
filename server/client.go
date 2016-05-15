@@ -13,6 +13,21 @@ type Client struct {
 	dirty  int       // the number of changes made by the client
 }
 
+func (c *Client) flushAOF() {
+	if c.dirty == 0 {
+		return
+	}
+	c.server.mu.Lock()
+	if c.server.aofbuf.Len() > 0 {
+		if _, err := c.server.aof.Write(c.server.aofbuf.Bytes()); err != nil {
+			panic(err)
+		}
+		c.server.aofbuf.Reset()
+	}
+	c.server.mu.Unlock()
+	c.dirty = 0
+}
+
 func (c *Client) ReplyString(s string) {
 	io.WriteString(c.wr, "+"+s+"\r\n")
 }

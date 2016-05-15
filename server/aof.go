@@ -19,21 +19,21 @@ func (s *Server) openAOF() {
 		t := time.NewTicker(time.Second)
 		defer t.Stop()
 		for range t.C {
-			s.aofmu.Lock()
+			s.mu.Lock()
 			if s.aofclosed {
-				s.aofmu.Unlock()
+				s.mu.Unlock()
 				return
 			}
 			s.aof.Sync()
-			s.aofmu.Unlock()
+			s.mu.Unlock()
 		}
 	}()
 	s.loadAOF()
 }
 
 func (s *Server) closeAOF() {
-	s.aofmu.Lock()
-	defer s.aofmu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.aof.Sync()
 	s.aof.Close()
 	s.aofclosed = true
