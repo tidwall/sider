@@ -57,19 +57,14 @@ func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 		}
 		// only have a partial command, read more data
 	}
-	if len(rd.buf) > 0 && !rd.copied {
-		// make sure to copy the buffer to a new array prior to reading from conn
-		nbuf := make([]byte, len(rd.buf))
-		copy(nbuf, rd.buf)
-		rd.buf = nbuf
-		rd.copied = true
-	}
 	n, err := rd.rd.Read(rd.rbuf)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	if len(rd.buf) == 0 {
-		rd.buf = rd.rbuf[:n]
+		// copy the data rather than assign a slice, otherwise string
+		// corruption may occur on the next network read.
+		rd.buf = append([]byte(nil), rd.rbuf[:n]...)
 		rd.copied = false
 	} else {
 		rd.buf = append(rd.buf, rd.rbuf[:n]...)

@@ -26,7 +26,7 @@ func lpushCommand(client *Client) {
 		client.server.SetKey(client.args[1], l)
 	}
 	for i := 2; i < len(client.args); i++ {
-		l.PushFront(scopy(client.args[i]))
+		l.PushFront(client.args[i])
 	}
 	client.ReplyInt(l.Len())
 	client.dirty++
@@ -43,7 +43,7 @@ func rpushCommand(client *Client) {
 		return
 	}
 	for i := 2; i < len(client.args); i++ {
-		l.PushBack(scopy(client.args[i]))
+		l.PushBack(client.args[i])
 	}
 	client.ReplyInt(l.Len())
 	client.dirty++
@@ -378,7 +378,7 @@ func lsetCommand(client *Client) {
 		el = l.Back()
 		for el != nil {
 			if i == start {
-				el.Value = scopy(client.args[3])
+				el.Value = client.args[3]
 				client.ReplyString("OK")
 				client.dirty++
 				return
@@ -392,7 +392,7 @@ func lsetCommand(client *Client) {
 		el = l.Front()
 		for el != nil {
 			if i == start {
-				el.Value = scopy(client.args[3])
+				el.Value = client.args[3]
 				client.ReplyString("OK")
 				client.dirty++
 				return

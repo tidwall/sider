@@ -110,23 +110,6 @@ type Server struct {
 	expiresdone bool
 }
 
-func scopy(s string) string {
-	sc := make([]byte, len(s))
-	copy(sc, []byte(s))
-	return string(sc)
-}
-
-func acopy(a []string) []string {
-	if a == nil {
-		return nil
-	}
-	r := make([]string, len(a))
-	for i, v := range a {
-		r[i] = scopy(v)
-	}
-	return r
-}
-
 func (s *Server) register(commandName string, f func(client *Client), opts string) {
 	var cmd Command
 	cmd.Func = f

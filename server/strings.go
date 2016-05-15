@@ -41,7 +41,7 @@ func getsetCommand(client *Client) {
 			res = s
 		}
 	}
-	client.server.SetKey(client.args[1], scopy(client.args[2]))
+	client.server.SetKey(client.args[1], client.args[2])
 	if !ok {
 		client.ReplyNull()
 	} else {
@@ -177,7 +177,7 @@ func setCommand(client *Client) {
 			return
 		}
 	}
-	client.server.SetKey(client.args[1], scopy(client.args[2]))
+	client.server.SetKey(client.args[1], client.args[2])
 	if expires {
 		client.server.Expire(client.args[1], when)
 	}
@@ -195,7 +195,7 @@ func setnxCommand(client *Client) {
 		client.ReplyInt(0)
 		return
 	}
-	client.server.SetKey(client.args[1], scopy(client.args[2]))
+	client.server.SetKey(client.args[1], client.args[2])
 	client.ReplyInt(1)
 	client.dirty++
 }
@@ -206,7 +206,7 @@ func msetCommand(client *Client) {
 		return
 	}
 	for i := 1; i < len(client.args); i += 2 {
-		client.server.SetKey(client.args[i+0], scopy(client.args[i+1]))
+		client.server.SetKey(client.args[i+0], client.args[i+1])
 		client.dirty++
 	}
 	client.ReplyString("OK")
@@ -225,7 +225,7 @@ func msetnxCommand(client *Client) {
 		}
 	}
 	for i := 1; i < len(client.args); i += 2 {
-		client.server.SetKey(client.args[i+0], scopy(client.args[i+1]))
+		client.server.SetKey(client.args[i+0], client.args[i+1])
 		client.dirty++
 	}
 	client.ReplyInt(1)
@@ -238,7 +238,7 @@ func appendCommand(client *Client) {
 	}
 	key, ok := client.server.GetKey(client.args[1])
 	if !ok {
-		client.server.SetKey(client.args[1], scopy(client.args[2]))
+		client.server.SetKey(client.args[1], client.args[2])
 		client.ReplyInt(len(client.args[2]))
 		client.dirty++
 		return
