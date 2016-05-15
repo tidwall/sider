@@ -282,25 +282,6 @@ func (s *Server) stopExpireLoop() {
 }
 
 func Start(addr string) {
-	// println(strconv.Atoi("-123"), atoi("-123"))
-	// println(strconv.Atoi("123"), atoi("123"))
-	// println(strconv.Atoi("0"), atoi("0"))
-	// var n int
-	// var err error
-	// start := time.Now()
-	// for i := 0; i < 1000000; i++ {
-	// 	n, err = strconv.Atoi("013")
-	// }
-	// println(time.Now().Sub(start).String())
-	// fmt.Printf("%v, %v\n", n, err)
-
-	// start = time.Now()
-	// for i := 0; i < 1000000; i++ {
-	// 	n, err = atoi("0")
-	// }
-	// println(time.Now().Sub(start).String())
-	// fmt.Printf("%v, %v\n", n, err)
-
 	s := &Server{
 		commands: make(map[string]*Command),
 		keys:     btree.New(16),
@@ -328,21 +309,25 @@ func Start(addr string) {
 }
 
 func autoCase(command string) string {
-	cc := '?'
 	for i := 0; i < len(command); i++ {
 		c := command[i]
 		if c >= 'A' && c <= 'Z' {
-			if cc == '?' {
-				cc = 'U'
-			} else if cc == 'L' {
-				return strings.ToLower(command)
+			for ; i < len(command); i++ {
+				c = command[i]
+				if c >= 'a' && c <= 'z' {
+					return strings.ToLower(command)
+				}
 			}
+			break
 		} else if c >= 'a' && c <= 'z' {
-			if cc == '?' {
-				cc = 'L'
-			} else if cc == 'U' {
-				return strings.ToLower(command)
+			i++
+			for ; i < len(command); i++ {
+				c = command[i]
+				if c >= 'A' && c <= 'Z' {
+					return strings.ToLower(command)
+				}
 			}
+			break
 		}
 	}
 	return command
@@ -355,7 +340,6 @@ func handleConn(conn net.Conn, server *Server) {
 	defer wr.Flush()
 	c := &Client{wr: wr, server: server}
 	defer c.flushAOF()
-
 	var flush bool
 	var err error
 	for {
