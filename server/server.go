@@ -44,6 +44,11 @@ func (s *Server) commandTable() {
 	s.register("lset", lsetCommand, "w+")    // Lists
 	s.register("ltrim", ltrimCommand, "w+")  // Lists
 
+	s.register("sadd", saddCommand, "w+")           // Sets
+	s.register("scard", scardCommand, "r")          // Sets
+	s.register("smembers", smembersCommand, "r")    // Sets
+	s.register("sismember", sismembersCommand, "r") // Sets
+
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
 	s.register("flushdb", flushdbCommand, "w+")    // Server
@@ -160,6 +165,24 @@ func (s *Server) GetKeyList(name string, create bool) (*list.List, bool) {
 		l := list.New()
 		s.SetKey(name, l)
 		return l, true
+	}
+	return nil, true
+}
+
+func (s *Server) GetKeySet(name string, create bool) (Set, bool) {
+	key, ok := s.GetKey(name)
+	if ok {
+		switch v := key.(type) {
+		default:
+			return nil, false
+		case Set:
+			return v, true
+		}
+	}
+	if create {
+		st := NewSet()
+		s.SetKey(name, st)
+		return st, true
 	}
 	return nil, true
 }

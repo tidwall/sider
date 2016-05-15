@@ -472,5 +472,8 @@ func ltrimCommand(client *Client) {
 		el = prev
 		i--
 	}
+	if l.Len() == 0 {
+		client.server.DelKey(client.args[1])
+	}
 	client.ReplyString("OK")
 }
