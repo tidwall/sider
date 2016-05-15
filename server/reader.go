@@ -242,6 +242,10 @@ func atoi(s string) (int, error) {
 	return n, nil
 }
 
+func itoa(n int) string {
+	return strconv.Itoa(n)
+}
+
 func atoui(s string) (int, error) {
 	if len(s) == 0 {
 		return 0, errors.New("invalid integer")

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"strconv"
 	"strings"
 	"time"
 )
@@ -63,7 +62,7 @@ func incrbyCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	n, err := strconv.ParseInt(client.args[2], 10, 64)
+	n, err := atoi(client.args[2])
 	if err != nil {
 		client.ReplyError("value is not an integer or out of range")
 		return
@@ -84,7 +83,7 @@ func decrbyCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	n, err := strconv.ParseInt(client.args[2], 10, 64)
+	n, err := atoi(client.args[2])
 	if err != nil {
 		client.ReplyError("value is not an integer or out of range")
 		return
@@ -92,8 +91,8 @@ func decrbyCommand(client *Client) {
 	genericIncrbyCommand(client, -n)
 }
 
-func genericIncrbyCommand(client *Client, delta int64) {
-	var n int64
+func genericIncrbyCommand(client *Client, delta int) {
+	var n int
 	key, ok := client.server.GetKey(client.args[1])
 	if ok {
 		switch s := key.(type) {
@@ -102,17 +101,17 @@ func genericIncrbyCommand(client *Client, delta int64) {
 			return
 		case string:
 			var err error
-			n, err = strconv.ParseInt(s, 10, 64)
+			n, err = atoi(s)
 			if err != nil {
 				client.ReplyTypeError()
 				return
 			}
-			n += delta
+			n += int(delta)
 		}
 	} else {
 		n = 1
 	}
-	client.server.UpdateKey(client.args[1], strconv.FormatInt(n, 10))
+	client.server.UpdateKey(client.args[1], itoa(n))
 	client.ReplyInt(int(n))
 	client.dirty++
 }
@@ -146,7 +145,7 @@ func setCommand(client *Client) {
 				return
 			}
 			i++
-			n, err := strconv.ParseInt(client.args[i], 10, 64)
+			n, err := atoi(client.args[i])
 			if err != nil {
 				client.ReplySyntaxError()
 				return
@@ -160,7 +159,7 @@ func setCommand(client *Client) {
 				return
 			}
 			i++
-			n, err := strconv.ParseInt(client.args[i], 10, 64)
+			n, err := atoi(client.args[i])
 			if err != nil {
 				client.ReplySyntaxError()
 				return
@@ -264,8 +263,8 @@ func bitcountCommand(client *Client) {
 	case 2:
 		all = true
 	case 4:
-		n1, err1 := strconv.ParseInt(client.args[2], 10, 64)
-		n2, err2 := strconv.ParseInt(client.args[3], 10, 64)
+		n1, err1 := atoi(client.args[2])
+		n2, err2 := atoi(client.args[3])
 		if err1 != nil || err2 != nil {
 			client.ReplyError("value is not an integer or out of range")
 			return

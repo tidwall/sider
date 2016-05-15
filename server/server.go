@@ -387,6 +387,7 @@ func flushdbCommand(client *Client) {
 	}
 	client.server.keys = btree.New(16)
 	client.ReplyString("OK")
+	client.dirty++
 }
 
 func flushallCommand(client *Client) {
@@ -396,4 +397,5 @@ func flushallCommand(client *Client) {
 	}
 	client.server.keys = btree.New(16)
 	client.ReplyString("OK")
+	client.dirty++
 }
