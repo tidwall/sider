@@ -59,18 +59,44 @@ func (s1 *Set) Inter(s2 *Set) *Set {
 	}
 	return s3
 }
-
-func (s *Set) Pop(count int) *Set {
-	s2 := NewSet()
-	for key := range s.m {
-		if count == 0 {
+func (s *Set) popRand(count int, pop bool) []string {
+	many := false
+	if count < 0 {
+		if pop {
+			return nil
+		} else {
+			count *= -1
+			many = true
+		}
+	}
+	var res []string
+	if count > 1024 {
+		res = make([]string, 0, 1024)
+	} else {
+		res = make([]string, 0, count)
+	}
+	for {
+		for key := range s.m {
+			if count <= 0 {
+				break
+			}
+			if pop {
+				delete(s.m, key)
+			}
+			res = append(res, key)
+			count--
+		}
+		if !many || count == 0 {
 			break
 		}
-		delete(s.m, key)
-		s2.Add(key)
-		count--
 	}
-	return s2
+	return res
+}
+func (s *Set) Pop(count int) []string {
+	return s.popRand(count, true)
+}
+func (s *Set) Rand(count int) []string {
+	return s.popRand(count, false)
 }
 
 func (s *Set) IsMember(member string) bool {
@@ -206,6 +232,9 @@ func sinterCommand(client *Client) {
 	sdiffinterGenericCommand(client, false)
 }
 func spopCommand(client *Client) {
+	srandmemberpopGenericCommand(client, true)
+}
+func srandmemberpopGenericCommand(client *Client, pop bool) {
 	if len(client.args) < 2 || len(client.args) > 3 {
 		client.ReplyAritryError()
 		return
@@ -216,6 +245,10 @@ func spopCommand(client *Client) {
 		n, err := strconv.ParseInt(client.args[2], 10, 64)
 		if err != nil {
 			client.ReplyInvalidIntError()
+			return
+		}
+		if pop && n < 0 {
+			client.ReplyError("index out of range")
 			return
 		}
 		count = int(n)
@@ -234,18 +267,29 @@ func spopCommand(client *Client) {
 		}
 		return
 	}
-	st2 := st.Pop(count)
-	client.dirty += st2.Len()
+	var res []string
+	if pop {
+		res = st.Pop(count)
+		client.dirty += len(res)
+	} else {
+		res = st.Rand(count)
+	}
 	if countSpecified {
-		client.ReplyMultiBulkLen(st2.Len())
-	} else if st2.Len() == 0 {
+		client.ReplyMultiBulkLen(len(res))
+	} else if len(res) == 0 {
 		client.ReplyNull()
 	}
-	st2.Ascend(func(s string) bool {
+	for _, s := range res {
 		client.ReplyBulk(s)
-		return countSpecified
-	})
-	if st.Len() == 0 {
+		if !countSpecified {
+			break
+		}
+	}
+	if pop && st.Len() == 0 {
 		client.server.DelKey(client.args[1])
 	}
+}
+
+func srandmemberCommand(client *Client) {
+	srandmemberpopGenericCommand(client, false)
 }

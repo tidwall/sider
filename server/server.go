@@ -44,13 +44,14 @@ func (s *Server) commandTable() {
 	s.register("lset", lsetCommand, "w+")    // Lists
 	s.register("ltrim", ltrimCommand, "w+")  // Lists
 
-	s.register("sadd", saddCommand, "w+")           // Sets
-	s.register("scard", scardCommand, "r")          // Sets
-	s.register("smembers", smembersCommand, "r")    // Sets
-	s.register("sismember", sismembersCommand, "r") // Sets
-	s.register("sdiff", sdiffCommand, "r")          // Sets
-	s.register("sinter", sinterCommand, "r")        // Sets
-	s.register("spop", spopCommand, "w+")           // Sets
+	s.register("sadd", saddCommand, "w+")              // Sets
+	s.register("scard", scardCommand, "r")             // Sets
+	s.register("smembers", smembersCommand, "r")       // Sets
+	s.register("sismember", sismembersCommand, "r")    // Sets
+	s.register("sdiff", sdiffCommand, "r")             // Sets
+	s.register("sinter", sinterCommand, "r")           // Sets
+	s.register("spop", spopCommand, "w+")              // Sets
+	s.register("srandmember", srandmemberCommand, "r") // Sets
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
