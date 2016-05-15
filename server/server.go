@@ -16,8 +16,8 @@ import (
 )
 
 func (s *Server) commandTable() {
-	// "r" lock for reading.
-	// "w" lock for writing.
+	// "r" lock for reading
+	// "w" lock for writing
 	// "+" write to aof
 	s.register("get", getCommand, "r")           // Strings
 	s.register("getset", getsetCommand, "w+")    // Strings
@@ -40,6 +40,7 @@ func (s *Server) commandTable() {
 	s.register("lpop", lpopCommand, "w+")    // Lists
 	s.register("rpop", rpopCommand, "w+")    // Lists
 	s.register("lindex", lindexCommand, "r") // Lists
+	s.register("lrem", lremCommand, "w+")    // Lists
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection

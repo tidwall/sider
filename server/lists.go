@@ -270,3 +270,71 @@ func lindexCommand(client *Client) {
 	}
 	client.ReplyNull()
 }
+
+func lremCommand(client *Client) {
+	if len(client.args) != 4 {
+		client.ReplyAritryError()
+		return
+	}
+	n, err := strconv.ParseInt(client.args[2], 10, 64)
+	if err != nil {
+		client.ReplyInvalidIntError()
+		return
+	}
+	l, ok := client.server.GetKeyList(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if l == nil {
+		client.ReplyInt(0)
+		return
+	}
+	count := 0
+	v := client.args[3]
+	if n == 0 {
+		el := l.Front()
+		for el != nil {
+			next := el.Next()
+			if el.Value.(string) == v {
+				l.Remove(el)
+				count++
+				client.dirty++
+			}
+			el = next
+		}
+	} else if n > 0 {
+		el := l.Front()
+		for el != nil {
+			if n == 0 {
+				break
+			}
+			next := el.Next()
+			if el.Value.(string) == v {
+				l.Remove(el)
+				count++
+				client.dirty++
+				n--
+			}
+			el = next
+		}
+	} else if n < 0 {
+		n *= -1
+		el := l.Back()
+		for el != nil {
+			if n == 0 {
+				break
+			}
+			next := el.Prev()
+			if el.Value.(string) == v {
+				l.Remove(el)
+				count++
+				client.dirty++
+				n--
+			}
+			el = next
+		}
+	}
+	client.ReplyInt(count)
+
+}
