@@ -57,6 +57,7 @@ func (s *Server) commandTable() {
 	s.register("spop", spopCommand, "w+")               // Sets
 	s.register("srandmember", srandmemberCommand, "r")  // Sets
 	s.register("srem", sremCommand, "w+")               // Sets
+	s.register("smove", smoveCommand, "w+")             // Sets
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
@@ -113,6 +114,17 @@ func scopy(s string) string {
 	sc := make([]byte, len(s))
 	copy(sc, []byte(s))
 	return string(sc)
+}
+
+func acopy(a []string) []string {
+	if a == nil {
+		return nil
+	}
+	r := make([]string, len(a))
+	for i, v := range a {
+		r[i] = scopy(v)
+	}
+	return r
 }
 
 func (s *Server) register(commandName string, f func(client *Client), opts string) {
@@ -340,6 +352,7 @@ func handleConn(conn net.Conn, server *Server) {
 		default:
 			if cmd, ok := server.commands[command]; ok {
 				if cmd.Write {
+					//c.args = acopy(c.args)
 					server.mu.Lock()
 				} else if cmd.Read {
 					server.mu.RLock()

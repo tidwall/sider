@@ -121,6 +121,7 @@ func (s *Set) Rand(count int) []string {
 }
 
 func (s *Set) IsMember(member string) bool {
+	println(member, s.m[member])
 	return s.m[member]
 }
 
@@ -374,4 +375,40 @@ func sremCommand(client *Client) {
 		client.server.DelKey(client.args[1])
 	}
 	client.ReplyInt(count)
+}
+
+func smoveCommand(client *Client) {
+	if len(client.args) != 4 {
+		client.ReplyAritryError()
+		return
+	}
+	src, ok := client.server.GetKeySet(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	dst, ok := client.server.GetKeySet(client.args[2], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if src == nil {
+		client.ReplyInt(0)
+		return
+	}
+	if !src.Del(client.args[3]) {
+		client.ReplyInt(0)
+		return
+	}
+	if dst == nil {
+		dst = NewSet()
+		dst.Add(client.args[3])
+		client.server.SetKey(client.args[2], dst)
+		client.ReplyInt(1)
+		client.dirty++
+		return
+	}
+	dst.Add(client.args[3])
+	client.ReplyInt(1)
+	client.dirty++
 }
