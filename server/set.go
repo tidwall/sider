@@ -18,6 +18,15 @@ func (s *Set) Add(member string) bool {
 	}
 	return false
 }
+
+func (s *Set) Del(member string) bool {
+	if s.m[member] {
+		delete(s.m, member)
+		return true
+	}
+	return false
+}
+
 func (s *Set) Ascend(iterator func(s string) bool) {
 	for v := range s.m {
 		if !iterator(v) {
@@ -231,9 +240,6 @@ func sdiffCommand(client *Client) {
 func sinterCommand(client *Client) {
 	sdiffinterGenericCommand(client, false)
 }
-func spopCommand(client *Client) {
-	srandmemberpopGenericCommand(client, true)
-}
 func srandmemberpopGenericCommand(client *Client, pop bool) {
 	if len(client.args) < 2 || len(client.args) > 3 {
 		client.ReplyAritryError()
@@ -292,4 +298,35 @@ func srandmemberpopGenericCommand(client *Client, pop bool) {
 
 func srandmemberCommand(client *Client) {
 	srandmemberpopGenericCommand(client, false)
+}
+
+func spopCommand(client *Client) {
+	srandmemberpopGenericCommand(client, true)
+}
+
+func sremCommand(client *Client) {
+	if len(client.args) < 3 {
+		client.ReplyAritryError()
+		return
+	}
+	st, ok := client.server.GetKeySet(client.args[1], false)
+	if !ok {
+		client.ReplyTypeError()
+		return
+	}
+	if st == nil {
+		client.ReplyInt(0)
+		return
+	}
+	var count int
+	for i := 2; i < len(client.args); i++ {
+		if st.Del(client.args[i]) {
+			count++
+			client.dirty++
+		}
+	}
+	if st.Len() == 0 {
+		client.server.DelKey(client.args[1])
+	}
+	client.ReplyInt(count)
 }

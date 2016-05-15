@@ -52,6 +52,7 @@ func (s *Server) commandTable() {
 	s.register("sinter", sinterCommand, "r")           // Sets
 	s.register("spop", spopCommand, "w+")              // Sets
 	s.register("srandmember", srandmemberCommand, "r") // Sets
+	s.register("srem", sremCommand, "w+")              // Sets
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
