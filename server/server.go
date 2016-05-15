@@ -41,6 +41,7 @@ func (s *Server) commandTable() {
 	s.register("rpop", rpopCommand, "w+")    // Lists
 	s.register("lindex", lindexCommand, "r") // Lists
 	s.register("lrem", lremCommand, "w+")    // Lists
+	s.register("lset", lsetCommand, "w+")    // Lists
 
 	s.register("echo", echoCommand, "")            // Connection
 	s.register("ping", pingCommand, "")            // Connection
@@ -91,6 +92,12 @@ type Server struct {
 	follower    bool
 	expires     map[string]time.Time
 	expiresdone bool
+}
+
+func scopy(s string) string {
+	sc := make([]byte, len(s))
+	copy(sc, []byte(s))
+	return string(sc)
 }
 
 func (s *Server) register(commandName string, f func(client *Client), opts string) {

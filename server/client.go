@@ -43,3 +43,6 @@ func (c *Client) ReplySyntaxError() {
 func (c *Client) ReplyInvalidIntError() {
 	io.WriteString(c.wr, "-ERR value is not an integer or out of range\r\n")
 }
+func (c *Client) ReplyNoSuchKeyError() {
+	io.WriteString(c.wr, "-ERR no such key\r\n")
+}
