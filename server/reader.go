@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strconv"
 )
@@ -19,6 +20,13 @@ type CommandReader struct {
 	rbuf   []byte
 	buf    []byte
 	copied bool
+}
+
+func NewCommandReader(rd io.Reader) *CommandReader {
+	return &CommandReader{
+		rd:   rd,
+		rbuf: make([]byte, 64*1024),
+	}
 }
 
 // autoConvertArgsToMultiBulk converts telnet style commands to resp autobulk commands.
@@ -83,15 +91,16 @@ func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 			if data[i-1] != '\r' {
 				return nil, nil, false, &protocolError{"invalid multibulk length"}
 			}
-			n, err := strconv.ParseInt(string(data[1:i-1]), 10, 64)
+			n, err := atoi(string(data[1 : i-1]))
 			if err != nil {
 				return nil, nil, false, &protocolError{"invalid multibulk length"}
 			}
 			if n <= 0 {
 				return data[:i+1], []string{}, false, nil
 			}
+			args = make([]string, 0, n)
 			i++
-			for j := int64(0); j < n; j++ {
+			for j := 0; j < n; j++ {
 				if i == len(data) {
 					return nil, nil, false, nil
 				}
@@ -104,7 +113,7 @@ func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 						if data[i-1] != '\r' {
 							return nil, nil, false, &protocolError{"invalid bulk length"}
 						}
-						n2, err := strconv.ParseUint(string(data[ii:i-1]), 10, 64)
+						n2, err := atoui(string(data[ii : i-1]))
 						if err != nil {
 							return nil, nil, false, &protocolError{"invalid bulk length"}
 						}
@@ -114,7 +123,7 @@ func readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 						}
 						args = append(args, string(data[i:i+int(n2)]))
 						i += int(n2 + 2)
-						if j == int64(n-1) {
+						if j == n-1 {
 							return data[:i], args, false, nil
 						}
 						break
@@ -189,4 +198,45 @@ func parseArgsFromTelnetLine(line []byte) ([]string, error) {
 		args = append(args, string(line[s:]))
 	}
 	return args, nil
+}
+
+func atoi(s string) (int, error) {
+	if len(s) == 0 {
+		return 0, errors.New("invalid integer")
+	}
+	var sign bool
+	var n int
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		} else if c == '-' {
+			if i != 0 || len(s) == 1 {
+				return 0, errors.New("invalid integer")
+			}
+			sign = true
+		} else {
+			return 0, errors.New("invalid integer")
+		}
+	}
+	if sign {
+		n *= -1
+	}
+	return n, nil
+}
+
+func atoui(s string) (uint, error) {
+	if len(s) == 0 {
+		return 0, errors.New("invalid integer")
+	}
+	var n uint
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			n = n*10 + uint(s[i]-'0')
+		} else {
+			return 0, errors.New("invalid integer")
+		}
+	}
+	return n, nil
 }

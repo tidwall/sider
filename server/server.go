@@ -282,6 +282,25 @@ func (s *Server) stopExpireLoop() {
 }
 
 func Start(addr string) {
+	// println(strconv.Atoi("-123"), atoi("-123"))
+	// println(strconv.Atoi("123"), atoi("123"))
+	// println(strconv.Atoi("0"), atoi("0"))
+	// var n int
+	// var err error
+	// start := time.Now()
+	// for i := 0; i < 1000000; i++ {
+	// 	n, err = strconv.Atoi("013")
+	// }
+	// println(time.Now().Sub(start).String())
+	// fmt.Printf("%v, %v\n", n, err)
+
+	// start = time.Now()
+	// for i := 0; i < 1000000; i++ {
+	// 	n, err = atoi("0")
+	// }
+	// println(time.Now().Sub(start).String())
+	// fmt.Printf("%v, %v\n", n, err)
+
 	s := &Server{
 		commands: make(map[string]*Command),
 		keys:     btree.New(16),
@@ -331,7 +350,7 @@ func autoCase(command string) string {
 
 func handleConn(conn net.Conn, server *Server) {
 	defer conn.Close()
-	rd := &CommandReader{rd: conn, rbuf: make([]byte, 64*1024)}
+	rd := NewCommandReader(conn)
 	wr := bufio.NewWriter(conn)
 	defer wr.Flush()
 	c := &Client{wr: wr, server: server}
