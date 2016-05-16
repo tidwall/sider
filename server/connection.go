@@ -4,33 +4,33 @@ import "strconv"
 
 func echoCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	c.ReplyBulk(c.args[1])
+	c.replyBulk(c.args[1])
 }
 
 func pingCommand(c *client) {
 	switch len(c.args) {
 	default:
-		c.ReplyAritryError()
+		c.replyAritryError()
 	case 1:
-		c.ReplyString("PONG")
+		c.replyString("PONG")
 	case 2:
-		c.ReplyBulk(c.args[1])
+		c.replyBulk(c.args[1])
 	}
 }
 
 func selectCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	num, err := strconv.ParseUint(c.args[1], 10, 32)
 	if err != nil {
-		c.ReplyError("invalid DB index")
+		c.replyError("invalid DB index")
 		return
 	}
 	c.db = c.s.selectDB(int(num))
-	c.ReplyString("OK")
+	c.replyString("OK")
 }

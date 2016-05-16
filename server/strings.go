@@ -7,51 +7,51 @@ import (
 
 func getCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if !ok {
-		c.ReplyNull()
+		c.replyNull()
 		return
 	}
 	switch s := key.(type) {
 	default:
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	case string:
-		c.ReplyBulk(s)
+		c.replyBulk(s)
 	}
 }
 
 func getsetCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	var res string
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if ok {
 		switch s := key.(type) {
 		default:
-			c.ReplyTypeError()
+			c.replyTypeError()
 			return
 		case string:
 			res = s
 		}
 	}
-	c.db.Set(c.args[1], c.args[2])
+	c.db.set(c.args[1], c.args[2])
 	if !ok {
-		c.ReplyNull()
+		c.replyNull()
 	} else {
-		c.ReplyBulk(res)
+		c.replyBulk(res)
 	}
 	c.dirty++
 }
 
 func incrCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	genericIncrbyCommand(c, 1)
@@ -59,12 +59,12 @@ func incrCommand(c *client) {
 
 func incrbyCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	n, err := atoi(c.args[2])
 	if err != nil {
-		c.ReplyError("value is not an integer or out of range")
+		c.replyError("value is not an integer or out of range")
 		return
 	}
 	genericIncrbyCommand(c, n)
@@ -72,7 +72,7 @@ func incrbyCommand(c *client) {
 
 func decrCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	genericIncrbyCommand(c, -1)
@@ -80,12 +80,12 @@ func decrCommand(c *client) {
 
 func decrbyCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	n, err := atoi(c.args[2])
 	if err != nil {
-		c.ReplyError("value is not an integer or out of range")
+		c.replyError("value is not an integer or out of range")
 		return
 	}
 	genericIncrbyCommand(c, -n)
@@ -93,17 +93,17 @@ func decrbyCommand(c *client) {
 
 func genericIncrbyCommand(c *client, delta int) {
 	var n int
-	value, ok := c.db.Get(c.args[1])
+	value, ok := c.db.get(c.args[1])
 	if ok {
 		switch s := value.(type) {
 		default:
-			c.ReplyTypeError()
+			c.replyTypeError()
 			return
 		case string:
 			var err error
 			n, err = atoi(s)
 			if err != nil {
-				c.ReplyTypeError()
+				c.replyTypeError()
 				return
 			}
 			n += int(delta)
@@ -111,14 +111,14 @@ func genericIncrbyCommand(c *client, delta int) {
 	} else {
 		n = 1
 	}
-	c.db.Update(c.args[1], itoa(n))
-	c.ReplyInt(int(n))
+	c.db.update(c.args[1], itoa(n))
+	c.replyInt(int(n))
 	c.dirty++
 }
 
 func setCommand(c *client) {
 	if len(c.args) < 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	var nx, xx bool
@@ -129,25 +129,25 @@ func setCommand(c *client) {
 		switch strings.ToLower(c.args[i]) {
 		case "nx":
 			if xx {
-				c.ReplySyntaxError()
+				c.replySyntaxError()
 				return
 			}
 			nx = true
 		case "xx":
 			if nx {
-				c.ReplySyntaxError()
+				c.replySyntaxError()
 				return
 			}
 			xx = true
 		case "ex":
 			if !px.IsZero() || i == len(c.args)-1 {
-				c.ReplySyntaxError()
+				c.replySyntaxError()
 				return
 			}
 			i++
 			n, err := atoi(c.args[i])
 			if err != nil {
-				c.ReplySyntaxError()
+				c.replySyntaxError()
 				return
 			}
 			ex = time.Now().Add(time.Duration(n) * time.Second)
@@ -155,13 +155,13 @@ func setCommand(c *client) {
 			when = ex
 		case "px":
 			if !ex.IsZero() || i == len(c.args)-1 {
-				c.ReplySyntaxError()
+				c.replySyntaxError()
 				return
 			}
 			i++
 			n, err := atoi(c.args[i])
 			if err != nil {
-				c.ReplySyntaxError()
+				c.replySyntaxError()
 				return
 			}
 			px = time.Now().Add(time.Duration(n) * time.Millisecond)
@@ -170,86 +170,86 @@ func setCommand(c *client) {
 		}
 	}
 	if nx || xx {
-		_, ok := c.db.Get(c.args[1])
+		_, ok := c.db.get(c.args[1])
 		if (ok && nx) || (!ok && xx) {
-			c.ReplyNull()
+			c.replyNull()
 			return
 		}
 	}
-	c.db.Set(c.args[1], c.args[2])
+	c.db.set(c.args[1], c.args[2])
 	if expires {
-		c.db.Expire(c.args[1], when)
+		c.db.expire(c.args[1], when)
 	}
-	c.ReplyString("OK")
+	c.replyString("OK")
 	c.dirty++
 }
 
 func setnxCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	_, ok := c.db.Get(c.args[1])
+	_, ok := c.db.get(c.args[1])
 	if ok {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
-	c.db.Set(c.args[1], c.args[2])
-	c.ReplyInt(1)
+	c.db.set(c.args[1], c.args[2])
+	c.replyInt(1)
 	c.dirty++
 }
 
 func msetCommand(c *client) {
 	if len(c.args) < 3 || (len(c.args)-1)%2 != 0 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	for i := 1; i < len(c.args); i += 2 {
-		c.db.Set(c.args[i+0], c.args[i+1])
+		c.db.set(c.args[i+0], c.args[i+1])
 		c.dirty++
 	}
-	c.ReplyString("OK")
+	c.replyString("OK")
 }
 
 func msetnxCommand(c *client) {
 	if len(c.args) < 3 || (len(c.args)-1)%2 != 0 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	for i := 1; i < len(c.args); i += 2 {
-		_, ok := c.db.Get(c.args[1])
+		_, ok := c.db.get(c.args[1])
 		if ok {
-			c.ReplyInt(0)
+			c.replyInt(0)
 			return
 		}
 	}
 	for i := 1; i < len(c.args); i += 2 {
-		c.db.Set(c.args[i+0], c.args[i+1])
+		c.db.set(c.args[i+0], c.args[i+1])
 		c.dirty++
 	}
-	c.ReplyInt(1)
+	c.replyInt(1)
 }
 
 func appendCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if !ok {
-		c.db.Set(c.args[1], c.args[2])
-		c.ReplyInt(len(c.args[2]))
+		c.db.set(c.args[1], c.args[2])
+		c.replyInt(len(c.args[2]))
 		c.dirty++
 		return
 	}
 	switch s := key.(type) {
 	default:
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	case string:
 		s += c.args[2]
-		c.db.Set(c.args[1], s)
-		c.ReplyInt(len(s))
+		c.db.set(c.args[1], s)
+		c.replyInt(len(s))
 		c.dirty++
 	}
 }
@@ -259,26 +259,26 @@ func bitcountCommand(c *client) {
 	var all bool
 	switch len(c.args) {
 	default:
-		c.ReplyAritryError()
+		c.replyAritryError()
 	case 2:
 		all = true
 	case 4:
 		n1, err1 := atoi(c.args[2])
 		n2, err2 := atoi(c.args[3])
 		if err1 != nil || err2 != nil {
-			c.ReplyError("value is not an integer or out of range")
+			c.replyError("value is not an integer or out of range")
 			return
 		}
 		start, end = int(n1), int(n2)
 	}
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if !ok {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
 	switch s := key.(type) {
 	default:
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	case string:
 		var count int
@@ -304,24 +304,24 @@ func bitcountCommand(c *client) {
 				count += int((c >> uint(j)) & 0x01)
 			}
 		}
-		c.ReplyInt(count)
+		c.replyInt(count)
 	}
 }
 
 func mgetCommand(c *client) {
 	if len(c.args) < 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	c.ReplyMultiBulkLen(len(c.args) - 1)
+	c.replyMultiBulkLen(len(c.args) - 1)
 	for i := 1; i < len(c.args); i++ {
-		key, ok := c.db.Get(c.args[i])
+		key, ok := c.db.get(c.args[i])
 		if !ok {
-			c.ReplyNull()
+			c.replyNull()
 		} else if s, ok := key.(string); ok {
-			c.ReplyBulk(s)
+			c.replyBulk(s)
 		} else {
-			c.ReplyNull()
+			c.replyNull()
 		}
 	}
 }

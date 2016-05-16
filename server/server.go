@@ -359,7 +359,7 @@ func handleConn(conn net.Conn, s *Server) {
 		c.raw, c.args, flush, err = rd.ReadCommand()
 		if err != nil {
 			if err, ok := err.(*protocolError); ok {
-				c.ReplyError(err.Error())
+				c.replyError(err.Error())
 			}
 			return
 		}
@@ -377,9 +377,9 @@ func handleConn(conn net.Conn, s *Server) {
 		} else {
 			switch commandName {
 			default:
-				c.ReplyError("unknown command '" + c.args[0] + "'")
+				c.replyError("unknown command '" + c.args[0] + "'")
 			case "quit":
-				c.ReplyString("OK")
+				c.replyString("OK")
 				return
 			}
 		}
@@ -397,28 +397,28 @@ func handleConn(conn net.Conn, s *Server) {
 /* Commands */
 func flushdbCommand(c *client) {
 	if len(c.args) != 1 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	c.db.Flush()
-	c.ReplyString("OK")
+	c.db.flush()
+	c.replyString("OK")
 	c.dirty++
 }
 
 func flushallCommand(c *client) {
 	if len(c.args) != 1 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	c.db.Flush()
-	c.ReplyString("OK")
+	c.db.flush()
+	c.replyString("OK")
 	c.dirty++
 }
 
 func dbsizeCommand(c *client) {
 	if len(c.args) != 1 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	c.ReplyInt(c.db.Len())
+	c.replyInt(c.db.len())
 }

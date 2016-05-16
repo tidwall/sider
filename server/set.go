@@ -2,16 +2,16 @@ package server
 
 import "strconv"
 
-type setT struct {
+type set struct {
 	m map[string]bool
 }
 
-func NewSet() *setT {
-	s := &setT{make(map[string]bool)}
+func newSet() *set {
+	s := &set{make(map[string]bool)}
 	return s
 }
 
-func (s *setT) Add(member string) bool {
+func (s *set) add(member string) bool {
 	if !s.m[member] {
 		s.m[member] = true
 		return true
@@ -19,7 +19,7 @@ func (s *setT) Add(member string) bool {
 	return false
 }
 
-func (s *setT) Del(member string) bool {
+func (s *set) del(member string) bool {
 	if s.m[member] {
 		delete(s.m, member)
 		return true
@@ -27,7 +27,7 @@ func (s *setT) Del(member string) bool {
 	return false
 }
 
-func (s *setT) Ascend(iterator func(s string) bool) {
+func (s *set) ascend(iterator func(s string) bool) {
 	for v := range s.m {
 		if !iterator(v) {
 			return
@@ -35,8 +35,8 @@ func (s *setT) Ascend(iterator func(s string) bool) {
 	}
 }
 
-func (s1 *setT) Diff(s2 *setT) *setT {
-	s3 := NewSet()
+func (s1 *set) diff(s2 *set) *set {
+	s3 := newSet()
 	for v1 := range s1.m {
 		found := false
 		for v2 := range s2.m {
@@ -52,8 +52,8 @@ func (s1 *setT) Diff(s2 *setT) *setT {
 	return s3
 }
 
-func (s1 *setT) Inter(s2 *setT) *setT {
-	s3 := NewSet()
+func (s1 *set) inter(s2 *set) *set {
+	s3 := newSet()
 	for v1 := range s1.m {
 		found := false
 		for v2 := range s2.m {
@@ -69,8 +69,8 @@ func (s1 *setT) Inter(s2 *setT) *setT {
 	return s3
 }
 
-func (s1 *setT) Union(s2 *setT) *setT {
-	s3 := NewSet()
+func (s1 *set) union(s2 *set) *set {
+	s3 := newSet()
 	for v := range s1.m {
 		s3.m[v] = true
 	}
@@ -80,7 +80,7 @@ func (s1 *setT) Union(s2 *setT) *setT {
 	return s3
 }
 
-func (s *setT) popRand(count int, pop bool) []string {
+func (s *set) popRand(count int, pop bool) []string {
 	many := false
 	if count < 0 {
 		if pop {
@@ -113,113 +113,113 @@ func (s *setT) popRand(count int, pop bool) []string {
 	}
 	return res
 }
-func (s *setT) Pop(count int) []string {
+func (s *set) pop(count int) []string {
 	return s.popRand(count, true)
 }
-func (s *setT) Rand(count int) []string {
+func (s *set) rand(count int) []string {
 	return s.popRand(count, false)
 }
 
-func (s *setT) IsMember(member string) bool {
+func (s *set) isMember(member string) bool {
 	return s.m[member]
 }
 
-func (s *setT) Len() int {
+func (s *set) len() int {
 	return len(s.m)
 }
 
 func saddCommand(c *client) {
 	if len(c.args) < 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	st, ok := c.db.GetSet(c.args[1], true)
+	st, ok := c.db.getSet(c.args[1], true)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	count := 0
 	for i := 2; i < len(c.args); i++ {
-		if st.Add(c.args[i]) {
+		if st.add(c.args[i]) {
 			c.dirty++
 			count++
 		}
 	}
-	c.ReplyInt(count)
+	c.replyInt(count)
 
 }
 
 func scardCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	st, ok := c.db.GetSet(c.args[1], false)
+	st, ok := c.db.getSet(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if st == nil {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
-	c.ReplyInt(st.Len())
+	c.replyInt(st.len())
 }
 func smembersCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	st, ok := c.db.GetSet(c.args[1], false)
+	st, ok := c.db.getSet(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if st == nil {
-		c.ReplyMultiBulkLen(0)
+		c.replyMultiBulkLen(0)
 		return
 	}
-	c.ReplyMultiBulkLen(st.Len())
-	st.Ascend(func(s string) bool {
-		c.ReplyBulk(s)
+	c.replyMultiBulkLen(st.len())
+	st.ascend(func(s string) bool {
+		c.replyBulk(s)
 		return true
 	})
 }
 func sismembersCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	st, ok := c.db.GetSet(c.args[1], false)
+	st, ok := c.db.getSet(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if st == nil {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
-	if st.IsMember(c.args[2]) {
-		c.ReplyInt(1)
+	if st.isMember(c.args[2]) {
+		c.replyInt(1)
 	} else {
-		c.ReplyInt(0)
+		c.replyInt(0)
 	}
 }
 
 func sdiffinterunionGenericCommand(c *client, diff, union bool, store bool) {
 	if (!store && len(c.args) < 2) || (store && len(c.args) < 3) {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	basei := 1
 	if store {
 		basei = 2
 	}
-	var st *setT
+	var st *set
 	for i := basei; i < len(c.args); i++ {
-		stt, ok := c.db.GetSet(c.args[i], false)
+		stt, ok := c.db.getSet(c.args[i], false)
 		if !ok {
-			c.ReplyTypeError()
+			c.replyTypeError()
 			return
 		}
 		if stt == nil {
@@ -234,34 +234,34 @@ func sdiffinterunionGenericCommand(c *client, diff, union bool, store bool) {
 			st = stt
 		} else {
 			if diff {
-				st = st.Diff(stt)
+				st = st.diff(stt)
 			} else if union {
-				st = st.Union(stt)
+				st = st.union(stt)
 			} else {
-				st = st.Inter(stt)
+				st = st.inter(stt)
 			}
 		}
 	}
 	if store {
-		if st == nil || st.Len() == 0 {
-			_, ok := c.db.Del(c.args[1])
+		if st == nil || st.len() == 0 {
+			_, ok := c.db.del(c.args[1])
 			if ok {
 				c.dirty++
 			}
-			c.ReplyInt(0)
+			c.replyInt(0)
 		} else {
-			c.db.Set(c.args[1], st)
+			c.db.set(c.args[1], st)
 			c.dirty++
-			c.ReplyInt(st.Len())
+			c.replyInt(st.len())
 		}
 	} else {
 		if st == nil {
-			c.ReplyMultiBulkLen(0)
+			c.replyMultiBulkLen(0)
 			return
 		}
-		c.ReplyMultiBulkLen(st.Len())
-		st.Ascend(func(s string) bool {
-			c.ReplyBulk(s)
+		c.replyMultiBulkLen(st.len())
+		st.ascend(func(s string) bool {
+			c.replyBulk(s)
 			return true
 		})
 	}
@@ -287,7 +287,7 @@ func sunionstoreCommand(c *client) {
 
 func srandmemberpopGenericCommand(c *client, pop bool) {
 	if len(c.args) < 2 || len(c.args) > 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	countSpecified := false
@@ -295,49 +295,49 @@ func srandmemberpopGenericCommand(c *client, pop bool) {
 	if len(c.args) > 2 {
 		n, err := strconv.ParseInt(c.args[2], 10, 64)
 		if err != nil {
-			c.ReplyInvalidIntError()
+			c.replyInvalidIntError()
 			return
 		}
 		if pop && n < 0 {
-			c.ReplyError("index out of range")
+			c.replyError("index out of range")
 			return
 		}
 		count = int(n)
 		countSpecified = true
 	}
-	st, ok := c.db.GetSet(c.args[1], false)
+	st, ok := c.db.getSet(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if st == nil {
 		if countSpecified {
-			c.ReplyMultiBulkLen(0)
+			c.replyMultiBulkLen(0)
 		} else {
-			c.ReplyNull()
+			c.replyNull()
 		}
 		return
 	}
 	var res []string
 	if pop {
-		res = st.Pop(count)
+		res = st.pop(count)
 		c.dirty += len(res)
 	} else {
-		res = st.Rand(count)
+		res = st.rand(count)
 	}
 	if countSpecified {
-		c.ReplyMultiBulkLen(len(res))
+		c.replyMultiBulkLen(len(res))
 	} else if len(res) == 0 {
-		c.ReplyNull()
+		c.replyNull()
 	}
 	for _, s := range res {
-		c.ReplyBulk(s)
+		c.replyBulk(s)
 		if !countSpecified {
 			break
 		}
 	}
-	if pop && st.Len() == 0 {
-		c.db.Del(c.args[1])
+	if pop && st.len() == 0 {
+		c.db.del(c.args[1])
 	}
 }
 
@@ -351,63 +351,63 @@ func spopCommand(c *client) {
 
 func sremCommand(c *client) {
 	if len(c.args) < 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	st, ok := c.db.GetSet(c.args[1], false)
+	st, ok := c.db.getSet(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if st == nil {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
 	var count int
 	for i := 2; i < len(c.args); i++ {
-		if st.Del(c.args[i]) {
+		if st.del(c.args[i]) {
 			count++
 			c.dirty++
 		}
 	}
-	if st.Len() == 0 {
-		c.db.Del(c.args[1])
+	if st.len() == 0 {
+		c.db.del(c.args[1])
 	}
-	c.ReplyInt(count)
+	c.replyInt(count)
 }
 
 func smoveCommand(c *client) {
 	if len(c.args) != 4 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	src, ok := c.db.GetSet(c.args[1], false)
+	src, ok := c.db.getSet(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
-	dst, ok := c.db.GetSet(c.args[2], false)
+	dst, ok := c.db.getSet(c.args[2], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if src == nil {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
-	if !src.Del(c.args[3]) {
-		c.ReplyInt(0)
+	if !src.del(c.args[3]) {
+		c.replyInt(0)
 		return
 	}
 	if dst == nil {
-		dst = NewSet()
-		dst.Add(c.args[3])
-		c.db.Set(c.args[2], dst)
-		c.ReplyInt(1)
+		dst = newSet()
+		dst.add(c.args[3])
+		c.db.set(c.args[2], dst)
+		c.replyInt(1)
 		c.dirty++
 		return
 	}
-	dst.Add(c.args[3])
-	c.ReplyInt(1)
+	dst.add(c.args[3])
+	c.replyInt(1)
 	c.dirty++
 }

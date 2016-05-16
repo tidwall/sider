@@ -29,36 +29,36 @@ func (c *client) flushAOF() error {
 	return nil
 }
 
-func (c *client) ReplyString(s string) {
+func (c *client) replyString(s string) {
 	io.WriteString(c.wr, "+"+s+"\r\n")
 }
-func (c *client) ReplyError(s string) {
+func (c *client) replyError(s string) {
 	io.WriteString(c.wr, "-ERR "+s+"\r\n")
 }
-func (c *client) ReplyAritryError() {
+func (c *client) replyAritryError() {
 	io.WriteString(c.wr, "-ERR wrong number of arguments for '"+c.args[0]+"'\r\n")
 }
-func (c *client) ReplyTypeError() {
+func (c *client) replyTypeError() {
 	io.WriteString(c.wr, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n")
 }
-func (c *client) ReplyBulk(s string) {
+func (c *client) replyBulk(s string) {
 	io.WriteString(c.wr, "$"+strconv.FormatInt(int64(len(s)), 10)+"\r\n"+s+"\r\n")
 }
-func (c *client) ReplyNull() {
+func (c *client) replyNull() {
 	io.WriteString(c.wr, "$-1\r\n")
 }
-func (c *client) ReplyInt(n int) {
+func (c *client) replyInt(n int) {
 	io.WriteString(c.wr, ":"+strconv.FormatInt(int64(n), 10)+"\r\n")
 }
-func (c *client) ReplyMultiBulkLen(n int) {
+func (c *client) replyMultiBulkLen(n int) {
 	io.WriteString(c.wr, "*"+strconv.FormatInt(int64(n), 10)+"\r\n")
 }
-func (c *client) ReplySyntaxError() {
+func (c *client) replySyntaxError() {
 	io.WriteString(c.wr, "-ERR syntax error\r\n")
 }
-func (c *client) ReplyInvalidIntError() {
+func (c *client) replyInvalidIntError() {
 	io.WriteString(c.wr, "-ERR value is not an integer or out of range\r\n")
 }
-func (c *client) ReplyNoSuchKeyError() {
+func (c *client) replyNoSuchKeyError() {
 	io.WriteString(c.wr, "-ERR no such key\r\n")
 }

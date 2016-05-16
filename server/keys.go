@@ -7,141 +7,141 @@ import (
 
 func delCommand(c *client) {
 	if len(c.args) < 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	count := 0
 	for i := 1; i < len(c.args); i++ {
-		if _, ok := c.db.Del(c.args[i]); ok {
+		if _, ok := c.db.del(c.args[i]); ok {
 			count++
 		}
 	}
 	c.dirty += count
-	c.ReplyInt(count)
+	c.replyInt(count)
 }
 
 func renameCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if !ok {
-		c.ReplyError("no such key")
+		c.replyError("no such key")
 		return
 	}
-	c.db.Del(c.args[1])
-	c.db.Set(c.args[2], key)
+	c.db.del(c.args[1])
+	c.db.set(c.args[2], key)
 	c.dirty++
-	c.ReplyString("OK")
+	c.replyString("OK")
 }
 
 func renamenxCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if !ok {
-		c.ReplyError("no such key")
+		c.replyError("no such key")
 		return
 	}
-	_, ok = c.db.Get(c.args[2])
+	_, ok = c.db.get(c.args[2])
 	if ok {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
-	c.db.Del(c.args[1])
-	c.db.Set(c.args[2], key)
-	c.ReplyInt(1)
+	c.db.del(c.args[1])
+	c.db.set(c.args[2], key)
+	c.replyInt(1)
 	c.dirty++
 }
 
 func keysCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	var keys []string
 	pattern := parsePattern(c.args[1])
-	c.db.Ascend(func(key string, value interface{}) bool {
+	c.db.ascend(func(key string, value interface{}) bool {
 		if pattern.Match(key) {
 			keys = append(keys, key)
 		}
 		return true
 	})
-	c.ReplyMultiBulkLen(len(keys))
+	c.replyMultiBulkLen(len(keys))
 	for _, key := range keys {
-		c.ReplyString(key)
+		c.replyString(key)
 	}
 }
 
 func typeCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	typ := c.db.GetType(c.args[1])
-	c.ReplyString(typ)
+	typ := c.db.getType(c.args[1])
+	c.replyString(typ)
 }
 
 func randomkeyCommand(c *client) {
 	if len(c.args) != 1 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	got := false
-	c.db.Ascend(func(key string, value interface{}) bool {
-		c.ReplyBulk(key)
+	c.db.ascend(func(key string, value interface{}) bool {
+		c.replyBulk(key)
 		got = true
 		return false
 	})
 	if !got {
-		c.ReplyNull()
+		c.replyNull()
 	}
 }
 
 func existsCommand(c *client) {
 	if len(c.args) == 1 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	var count int
 	for i := 1; i < len(c.args); i++ {
-		if _, ok := c.db.Get(c.args[i]); ok {
+		if _, ok := c.db.get(c.args[i]); ok {
 			count++
 		}
 	}
-	c.ReplyInt(count)
+	c.replyInt(count)
 }
 func expireCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	seconds, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		c.ReplyError("value is not an integer or out of range")
+		c.replyError("value is not an integer or out of range")
 		return
 	}
-	if c.db.Expire(c.args[1], time.Now().Add(time.Duration(seconds)*time.Second)) {
-		c.ReplyInt(1)
+	if c.db.expire(c.args[1], time.Now().Add(time.Duration(seconds)*time.Second)) {
+		c.replyInt(1)
 		c.dirty++
 	} else {
-		c.ReplyInt(0)
+		c.replyInt(0)
 	}
 }
 func ttlCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	_, expires, ok := c.db.GetExpires(c.args[1])
+	_, expires, ok := c.db.getExpires(c.args[1])
 	if !ok {
-		c.ReplyInt(-2)
+		c.replyInt(-2)
 	} else if expires.IsZero() {
-		c.ReplyInt(-1)
+		c.replyInt(-1)
 	} else {
-		c.ReplyInt(int(expires.Sub(time.Now()) / time.Second))
+		c.replyInt(int(expires.Sub(time.Now()) / time.Second))
 	}
 }

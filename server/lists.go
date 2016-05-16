@@ -7,71 +7,71 @@ import (
 
 func lpushCommand(c *client) {
 	if len(c.args) < 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 
 	var l *list.List
-	key, ok := c.db.Get(c.args[1])
+	key, ok := c.db.get(c.args[1])
 	if ok {
 		switch v := key.(type) {
 		default:
-			c.ReplyTypeError()
+			c.replyTypeError()
 			return
 		case *list.List:
 			l = v
 		}
 	} else {
 		l = list.New()
-		c.db.Set(c.args[1], l)
+		c.db.set(c.args[1], l)
 	}
 	for i := 2; i < len(c.args); i++ {
 		l.PushFront(c.args[i])
 	}
-	c.ReplyInt(l.Len())
+	c.replyInt(l.Len())
 	c.dirty++
 }
 
 func rpushCommand(c *client) {
 	if len(c.args) < 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	l, ok := c.db.GetList(c.args[1], true)
+	l, ok := c.db.getList(c.args[1], true)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	for i := 2; i < len(c.args); i++ {
 		l.PushBack(c.args[i])
 	}
-	c.ReplyInt(l.Len())
+	c.replyInt(l.Len())
 	c.dirty++
 }
 
 func lrangeCommand(c *client) {
 	if len(c.args) != 4 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
 	en, err := strconv.ParseInt(c.args[3], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
 
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyMultiBulkLen(0)
+		c.replyMultiBulkLen(0)
 		return
 	}
 
@@ -89,14 +89,14 @@ func lrangeCommand(c *client) {
 	if en < 0 {
 		stop = llen + int(en)
 		if stop < 0 {
-			c.ReplyMultiBulkLen(0)
+			c.replyMultiBulkLen(0)
 			return
 		}
 	} else {
 		stop = int(en)
 	}
 	if start > stop || start >= llen || llen == 0 {
-		c.ReplyMultiBulkLen(0)
+		c.replyMultiBulkLen(0)
 		return
 	}
 
@@ -135,97 +135,97 @@ func lrangeCommand(c *client) {
 		i++
 	}
 
-	c.ReplyMultiBulkLen(len(res))
+	c.replyMultiBulkLen(len(res))
 	for _, s := range res {
-		c.ReplyBulk(s)
+		c.replyBulk(s)
 	}
 }
 
 func llenCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
-	c.ReplyInt(l.Len())
+	c.replyInt(l.Len())
 }
 
 func lpopCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyNull()
+		c.replyNull()
 	} else if l.Len() > 0 {
 		el := l.Front()
 		l.Remove(el)
 		if l.Len() == 0 {
-			c.db.Del(c.args[1])
+			c.db.del(c.args[1])
 		}
-		c.ReplyBulk(el.Value.(string))
+		c.replyBulk(el.Value.(string))
 		c.dirty++
 	} else {
-		c.ReplyNull()
+		c.replyNull()
 	}
 }
 
 func rpopCommand(c *client) {
 	if len(c.args) != 2 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyNull()
+		c.replyNull()
 	} else if l.Len() > 0 {
 		el := l.Back()
 		l.Remove(el)
 		if l.Len() == 0 {
-			c.db.Del(c.args[1])
+			c.db.del(c.args[1])
 		}
-		c.ReplyBulk(el.Value.(string))
+		c.replyBulk(el.Value.(string))
 		c.dirty++
 	} else {
-		c.ReplyNull()
+		c.replyNull()
 	}
 }
 
 func lindexCommand(c *client) {
 	if len(c.args) != 3 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
 
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyNull()
+		c.replyNull()
 		return
 	}
 	llen := l.Len()
@@ -237,7 +237,7 @@ func lindexCommand(c *client) {
 	}
 
 	if start < 0 || start >= llen || llen == 0 {
-		c.ReplyNull()
+		c.replyNull()
 		return
 	}
 
@@ -249,7 +249,7 @@ func lindexCommand(c *client) {
 		el = l.Back()
 		for el != nil {
 			if i == start {
-				c.ReplyBulk(el.Value.(string))
+				c.replyBulk(el.Value.(string))
 				return
 			}
 			el = el.Prev()
@@ -261,33 +261,33 @@ func lindexCommand(c *client) {
 		el = l.Front()
 		for el != nil {
 			if i == start {
-				c.ReplyBulk(el.Value.(string))
+				c.replyBulk(el.Value.(string))
 				return
 			}
 			el = el.Next()
 			i++
 		}
 	}
-	c.ReplyNull()
+	c.replyNull()
 }
 
 func lremCommand(c *client) {
 	if len(c.args) != 4 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	n, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyInt(0)
+		c.replyInt(0)
 		return
 	}
 	count := 0
@@ -335,26 +335,26 @@ func lremCommand(c *client) {
 			el = next
 		}
 	}
-	c.ReplyInt(count)
+	c.replyInt(count)
 }
 
 func lsetCommand(c *client) {
 	if len(c.args) != 4 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyNoSuchKeyError()
+		c.replyNoSuchKeyError()
 		return
 	}
 
@@ -366,7 +366,7 @@ func lsetCommand(c *client) {
 		start = int(sn)
 	}
 	if start < 0 || start >= llen || llen == 0 {
-		c.ReplyError("index out of range")
+		c.replyError("index out of range")
 		return
 	}
 
@@ -379,7 +379,7 @@ func lsetCommand(c *client) {
 		for el != nil {
 			if i == start {
 				el.Value = c.args[3]
-				c.ReplyString("OK")
+				c.replyString("OK")
 				c.dirty++
 				return
 			}
@@ -393,7 +393,7 @@ func lsetCommand(c *client) {
 		for el != nil {
 			if i == start {
 				el.Value = c.args[3]
-				c.ReplyString("OK")
+				c.replyString("OK")
 				c.dirty++
 				return
 			}
@@ -401,32 +401,32 @@ func lsetCommand(c *client) {
 			i++
 		}
 	}
-	c.ReplyError("index out of range")
+	c.replyError("index out of range")
 }
 
 func ltrimCommand(c *client) {
 	if len(c.args) != 4 {
-		c.ReplyAritryError()
+		c.replyAritryError()
 		return
 	}
 	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
 	en, err := strconv.ParseInt(c.args[3], 10, 64)
 	if err != nil {
-		c.ReplyInvalidIntError()
+		c.replyInvalidIntError()
 		return
 	}
 
-	l, ok := c.db.GetList(c.args[1], false)
+	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
-		c.ReplyTypeError()
+		c.replyTypeError()
 		return
 	}
 	if l == nil {
-		c.ReplyString("OK")
+		c.replyString("OK")
 		return
 	}
 
@@ -473,7 +473,7 @@ func ltrimCommand(c *client) {
 		i--
 	}
 	if l.Len() == 0 {
-		c.db.Del(c.args[1])
+		c.db.del(c.args[1])
 	}
-	c.ReplyString("OK")
+	c.replyString("OK")
 }

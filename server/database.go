@@ -24,21 +24,21 @@ func newDB() *database {
 	}
 }
 
-func (db *database) Len() int {
+func (db *database) len() int {
 	return len(db.items)
 }
 
-func (db *database) Flush() {
+func (db *database) flush() {
 	db.items = make(map[string]dbItem)
 	db.expires = make(map[string]time.Time)
 }
 
-func (db *database) Set(key string, value interface{}) {
+func (db *database) set(key string, value interface{}) {
 	delete(db.expires, key)
 	db.items[key] = dbItem{value: value}
 }
 
-func (db *database) Get(key string) (interface{}, bool) {
+func (db *database) get(key string) (interface{}, bool) {
 	item, ok := db.items[key]
 	if !ok {
 		return nil, false
@@ -53,8 +53,8 @@ func (db *database) Get(key string) (interface{}, bool) {
 	return item.value, true
 }
 
-func (db *database) GetType(key string) string {
-	v, ok := db.Get(key)
+func (db *database) getType(key string) string {
+	v, ok := db.get(key)
 	if !ok {
 		return "none"
 	}
@@ -68,12 +68,12 @@ func (db *database) GetType(key string) string {
 		return "string"
 	case *list.List:
 		return "list"
-	case *setT:
+	case *set:
 		return "set"
 	}
 }
 
-func (db *database) Del(key string) (interface{}, bool) {
+func (db *database) del(key string) (interface{}, bool) {
 	item, ok := db.items[key]
 	if !ok {
 		return nil, false
@@ -90,7 +90,7 @@ func (db *database) Del(key string) (interface{}, bool) {
 	return item.value, true
 }
 
-func (db *database) Expire(key string, when time.Time) bool {
+func (db *database) expire(key string, when time.Time) bool {
 	item, ok := db.items[key]
 	if !ok {
 		return false
@@ -101,7 +101,7 @@ func (db *database) Expire(key string, when time.Time) bool {
 	return true
 }
 
-func (db *database) GetExpires(key string) (interface{}, time.Time, bool) {
+func (db *database) getExpires(key string) (interface{}, time.Time, bool) {
 	item, ok := db.items[key]
 	if !ok {
 		return nil, time.Time{}, false
@@ -118,8 +118,8 @@ func (db *database) GetExpires(key string) (interface{}, time.Time, bool) {
 	return item.value, expires, true
 }
 
-func (db *database) GetList(key string, create bool) (*list.List, bool) {
-	value, ok := db.Get(key)
+func (db *database) getList(key string, create bool) (*list.List, bool) {
+	value, ok := db.get(key)
 	if ok {
 		switch v := value.(type) {
 		default:
@@ -130,31 +130,31 @@ func (db *database) GetList(key string, create bool) (*list.List, bool) {
 	}
 	if create {
 		l := list.New()
-		db.Set(key, l)
+		db.set(key, l)
 		return l, true
 	}
 	return nil, true
 }
 
-func (db *database) GetSet(key string, create bool) (*setT, bool) {
-	value, ok := db.Get(key)
+func (db *database) getSet(key string, create bool) (*set, bool) {
+	value, ok := db.get(key)
 	if ok {
 		switch v := value.(type) {
 		default:
 			return nil, false
-		case *setT:
+		case *set:
 			return v, true
 		}
 	}
 	if create {
-		st := NewSet()
-		db.Set(key, st)
+		st := newSet()
+		db.set(key, st)
 		return st, true
 	}
 	return nil, true
 }
 
-func (db *database) Ascend(iterator func(key string, value interface{}) bool) {
+func (db *database) ascend(iterator func(key string, value interface{}) bool) {
 	now := time.Now()
 	for key, item := range db.items {
 		if item.expires {
@@ -170,7 +170,7 @@ func (db *database) Ascend(iterator func(key string, value interface{}) bool) {
 	}
 }
 
-func (db *database) Update(key string, value interface{}) {
+func (db *database) update(key string, value interface{}) {
 	item, ok := db.items[key]
 	if ok {
 		item.value = value
@@ -180,7 +180,7 @@ func (db *database) Update(key string, value interface{}) {
 	db.items[key] = item
 }
 
-func (db *database) DeleteExpires() (deletedKeys []string) {
+func (db *database) deleteExpires() (deletedKeys []string) {
 	now := time.Now()
 	for key, t := range db.expires {
 		if now.Before(t) {
