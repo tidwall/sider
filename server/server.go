@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,10 +60,13 @@ func (s *Server) commandTable() {
 	s.register("srem", sremCommand, "w+")               // Sets
 	s.register("smove", smoveCommand, "w+")             // Sets
 
-	s.register("echo", echoCommand, "")            // Connection
-	s.register("ping", pingCommand, "")            // Connection
-	s.register("flushdb", flushdbCommand, "w+")    // Server
-	s.register("flushall", flushallCommand, "w+")  // Server
+	s.register("echo", echoCommand, "") // Connection
+	s.register("ping", pingCommand, "") // Connection
+
+	s.register("flushdb", flushdbCommand, "w+")   // Server
+	s.register("flushall", flushallCommand, "w+") // Server
+	s.register("dbsize", dbsizeCommand, "r")      // Server
+
 	s.register("del", delCommand, "w+")            // Keys
 	s.register("keys", keysCommand, "r")           // Keys
 	s.register("rename", renameCommand, "w+")      // Keys
@@ -98,9 +102,10 @@ type Config struct {
 }
 
 type Server struct {
-	mu          sync.RWMutex
-	commands    map[string]*Command
-	keys        *btree.BTree
+	mu       sync.RWMutex
+	commands map[string]*Command
+	//keys        *btree.BTree
+	keys        map[string]*Key
 	config      Config
 	aof         *os.File
 	aofbuf      bytes.Buffer
@@ -134,11 +139,10 @@ func (s *Server) register(commandName string, f func(client *Client), opts strin
 }
 
 func (s *Server) GetKey(name string) (interface{}, bool) {
-	item := s.keys.Get(&Key{Name: name})
-	if item == nil {
+	key, ok := s.keys[name]
+	if !ok {
 		return nil, false
 	}
-	key := item.(*Key)
 	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
 		return nil, false
 	}
@@ -146,11 +150,10 @@ func (s *Server) GetKey(name string) (interface{}, bool) {
 }
 
 func (s *Server) GetKeyExpires(name string) (interface{}, time.Time, bool) {
-	item := s.keys.Get(&Key{Name: name})
-	if item == nil {
+	key, ok := s.keys[name]
+	if !ok {
 		return nil, time.Time{}, false
 	}
-	key := item.(*Key)
 	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
 		return nil, time.Time{}, false
 	}
@@ -195,37 +198,36 @@ func (s *Server) GetKeySet(name string, create bool) (*Set, bool) {
 
 func (s *Server) SetKey(name string, value interface{}) {
 	delete(s.expires, name)
-	s.keys.ReplaceOrInsert(&Key{Name: name, Value: value})
+	s.keys[name] = &Key{Name: name, Value: value}
 }
 
 func (s *Server) UpdateKey(name string, value interface{}) {
-	item := s.keys.Get(&Key{Name: name})
-	if item != nil {
-		item.(*Key).Value = value
+	key, ok := s.keys[name]
+	if ok {
+		key.Value = value
 	} else {
 		s.SetKey(name, value)
 	}
 }
 
 func (s *Server) DelKey(name string) (interface{}, bool) {
-	item := s.keys.Delete(&Key{Name: name})
-	if item == nil {
+	key, ok := s.keys[name]
+	if !ok {
 		return nil, false
 	}
-	key := item.(*Key)
+	delete(s.keys, name)
 	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
 		return nil, false
 	}
 	delete(s.expires, name)
-	return item.(*Key).Value, true
+	return key.Value, true
 }
 
 func (s *Server) Expire(name string, when time.Time) bool {
-	item := s.keys.Get(&Key{Name: name})
-	if item == nil {
+	key, ok := s.keys[name]
+	if !ok {
 		return false
 	}
-	key := item.(*Key)
 	key.Expires = when
 	s.expires[name] = when
 	return true
@@ -257,7 +259,7 @@ func (s *Server) forceDeleteExpires() {
 	var aofbuf bytes.Buffer
 	for key, expires := range s.expires {
 		if now.After(expires) {
-			s.keys.Delete(&Key{Name: key})
+			delete(s.keys, key)
 			aofbuf.WriteString("*2\r\n$3\r\ndel\r\n$")
 			aofbuf.WriteString(strconv.FormatInt(int64(len(key)), 10))
 			aofbuf.WriteString("\r\n")
@@ -284,8 +286,9 @@ func (s *Server) stopExpireLoop() {
 func Start(addr string) {
 	s := &Server{
 		commands: make(map[string]*Command),
-		keys:     btree.New(16),
-		expires:  make(map[string]time.Time),
+		//keys:     btree.New(16),
+		keys:    make(map[string]*Key),
+		expires: make(map[string]time.Time),
 	}
 	s.commandTable()
 	s.openAOF()
@@ -385,9 +388,10 @@ func flushdbCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	client.server.keys = btree.New(16)
+	client.server.keys = make(map[string]*Key)
 	client.ReplyString("OK")
 	client.dirty++
+	go runtime.GC()
 }
 
 func flushallCommand(client *Client) {
@@ -395,7 +399,16 @@ func flushallCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	client.server.keys = btree.New(16)
+	client.server.keys = make(map[string]*Key)
 	client.ReplyString("OK")
 	client.dirty++
+	go runtime.GC()
+}
+
+func dbsizeCommand(client *Client) {
+	if len(client.args) != 1 {
+		client.ReplyAritryError()
+		return
+	}
+	client.ReplyInt(len(client.server.keys))
 }

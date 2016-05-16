@@ -3,8 +3,6 @@ package server
 import (
 	"strconv"
 	"time"
-
-	"github.com/google/btree"
 )
 
 func delCommand(client *Client) {
@@ -65,45 +63,53 @@ func keysCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	var keys []string
-	pattern := parsePattern(client.args[1])
-	if pattern.All {
-		client.server.keys.Ascend(
-			func(item btree.Item) bool {
-				keys = append(keys, item.(*Key).Name)
-				return true
-			},
-		)
-	} else if !pattern.Glob {
-		item := client.server.keys.Get(&Key{Name: pattern.Value})
-		if item != nil {
-			keys = append(keys, item.(*Key).Name)
-		}
-	} else if pattern.GreaterOrEqual != "" {
-		client.server.keys.AscendRange(
-			&Key{Name: pattern.GreaterOrEqual},
-			&Key{Name: pattern.LessThan},
-			func(item btree.Item) bool {
-				if pattern.Match(item.(*Key).Name) {
-					keys = append(keys, item.(*Key).Name)
-				}
-				return true
-			},
-		)
-	} else {
-		client.server.keys.Ascend(
-			func(item btree.Item) bool {
-				if pattern.Match(item.(*Key).Name) {
-					keys = append(keys, item.(*Key).Name)
-				}
-				return true
-			},
-		)
+	client.ReplyMultiBulkLen(len(client.server.keys))
+	for name := range client.server.keys {
+		client.ReplyBulk(name)
 	}
-	client.ReplyMultiBulkLen(len(keys))
-	for _, key := range keys {
-		client.ReplyBulk(key)
-	}
+
+	// var keys []string
+	// pattern := parsePattern(client.args[1])
+	// if pattern.All {
+	// 	for name := range client.server.keys {
+	// 		keys = append(keys, name)
+	// 	}
+	// 	// client.server.keys.Ascend(
+	// 	// 	func(item btree.Item) bool {
+	// 	// 		keys = append(keys, item.(*Key).Name)
+	// 	// 		return true
+	// 	// 	},
+	// 	// )
+	// } else if !pattern.Glob {
+	// 	// item := client.server.keys.Get(&Key{Name: pattern.Value})
+	// 	// if item != nil {
+	// 	// 	keys = append(keys, item.(*Key).Name)
+	// 	// }
+	// } else if pattern.GreaterOrEqual != "" {
+	// 	// client.server.keys.AscendRange(
+	// 	// 	&Key{Name: pattern.GreaterOrEqual},
+	// 	// 	&Key{Name: pattern.LessThan},
+	// 	// 	func(item btree.Item) bool {
+	// 	// 		if pattern.Match(item.(*Key).Name) {
+	// 	// 			keys = append(keys, item.(*Key).Name)
+	// 	// 		}
+	// 	// 		return true
+	// 	// 	},
+	// 	// )
+	// } else {
+	// 	// client.server.keys.Ascend(
+	// 	// 	func(item btree.Item) bool {
+	// 	// 		if pattern.Match(item.(*Key).Name) {
+	// 	// 			keys = append(keys, item.(*Key).Name)
+	// 	// 		}
+	// 	// 		return true
+	// 	// 	},
+	// 	// )
+	// }
+	// client.ReplyMultiBulkLen(len(keys))
+	// for _, key := range keys {
+	// 	client.ReplyBulk(key)
+	// }
 }
 
 func typeCommand(client *Client) {
@@ -129,12 +135,10 @@ func randomkeyCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	item := client.server.keys.Random()
-	if item == nil {
-		client.ReplyNull()
-		return
+	for name := range client.server.keys {
+		client.ReplyBulk(name)
 	}
-	client.ReplyBulk(item.(*Key).Name)
+	client.ReplyNull()
 }
 
 func existsCommand(client *Client) {
