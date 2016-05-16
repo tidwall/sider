@@ -1,20 +1,36 @@
 package server
 
-func echoCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+import "strconv"
+
+func echoCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	client.ReplyBulk(client.args[1])
+	c.ReplyBulk(c.args[1])
 }
 
-func pingCommand(client *Client) {
-	switch len(client.args) {
+func pingCommand(c *client) {
+	switch len(c.args) {
 	default:
-		client.ReplyAritryError()
+		c.ReplyAritryError()
 	case 1:
-		client.ReplyString("PONG")
+		c.ReplyString("PONG")
 	case 2:
-		client.ReplyBulk(client.args[1])
+		c.ReplyBulk(c.args[1])
 	}
+}
+
+func selectCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
+		return
+	}
+	num, err := strconv.ParseUint(c.args[1], 10, 32)
+	if err != nil {
+		c.ReplyError("invalid DB index")
+		return
+	}
+	c.db = c.server.selectDB(int(num))
+	c.ReplyString("OK")
 }

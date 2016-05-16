@@ -5,105 +5,105 @@ import (
 	"time"
 )
 
-func getCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func getCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.db.Get(client.args[1])
+	key, ok := c.db.Get(c.args[1])
 	if !ok {
-		client.ReplyNull()
+		c.ReplyNull()
 		return
 	}
 	switch s := key.(type) {
 	default:
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	case string:
-		client.ReplyBulk(s)
+		c.ReplyBulk(s)
 	}
 }
 
-func getsetCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func getsetCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
 	var res string
-	key, ok := client.server.db.Get(client.args[1])
+	key, ok := c.db.Get(c.args[1])
 	if ok {
 		switch s := key.(type) {
 		default:
-			client.ReplyTypeError()
+			c.ReplyTypeError()
 			return
 		case string:
 			res = s
 		}
 	}
-	client.server.db.Set(client.args[1], client.args[2])
+	c.db.Set(c.args[1], c.args[2])
 	if !ok {
-		client.ReplyNull()
+		c.ReplyNull()
 	} else {
-		client.ReplyBulk(res)
+		c.ReplyBulk(res)
 	}
-	client.dirty++
+	c.dirty++
 }
 
-func incrCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func incrCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	genericIncrbyCommand(client, 1)
+	genericIncrbyCommand(c, 1)
 }
 
-func incrbyCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func incrbyCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
-	n, err := atoi(client.args[2])
+	n, err := atoi(c.args[2])
 	if err != nil {
-		client.ReplyError("value is not an integer or out of range")
+		c.ReplyError("value is not an integer or out of range")
 		return
 	}
-	genericIncrbyCommand(client, n)
+	genericIncrbyCommand(c, n)
 }
 
-func decrCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func decrCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	genericIncrbyCommand(client, -1)
+	genericIncrbyCommand(c, -1)
 }
 
-func decrbyCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func decrbyCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
-	n, err := atoi(client.args[2])
+	n, err := atoi(c.args[2])
 	if err != nil {
-		client.ReplyError("value is not an integer or out of range")
+		c.ReplyError("value is not an integer or out of range")
 		return
 	}
-	genericIncrbyCommand(client, -n)
+	genericIncrbyCommand(c, -n)
 }
 
-func genericIncrbyCommand(client *Client, delta int) {
+func genericIncrbyCommand(c *client, delta int) {
 	var n int
-	value, ok := client.server.db.Get(client.args[1])
+	value, ok := c.db.Get(c.args[1])
 	if ok {
 		switch s := value.(type) {
 		default:
-			client.ReplyTypeError()
+			c.ReplyTypeError()
 			return
 		case string:
 			var err error
 			n, err = atoi(s)
 			if err != nil {
-				client.ReplyTypeError()
+				c.ReplyTypeError()
 				return
 			}
 			n += int(delta)
@@ -111,57 +111,57 @@ func genericIncrbyCommand(client *Client, delta int) {
 	} else {
 		n = 1
 	}
-	client.server.db.Update(client.args[1], itoa(n))
-	client.ReplyInt(int(n))
-	client.dirty++
+	c.db.Update(c.args[1], itoa(n))
+	c.ReplyInt(int(n))
+	c.dirty++
 }
 
-func setCommand(client *Client) {
-	if len(client.args) < 3 {
-		client.ReplyAritryError()
+func setCommand(c *client) {
+	if len(c.args) < 3 {
+		c.ReplyAritryError()
 		return
 	}
 	var nx, xx bool
 	var ex, px time.Time
 	var expires bool
 	var when time.Time
-	for i := 3; i < len(client.args); i++ {
-		switch strings.ToLower(client.args[i]) {
+	for i := 3; i < len(c.args); i++ {
+		switch strings.ToLower(c.args[i]) {
 		case "nx":
 			if xx {
-				client.ReplySyntaxError()
+				c.ReplySyntaxError()
 				return
 			}
 			nx = true
 		case "xx":
 			if nx {
-				client.ReplySyntaxError()
+				c.ReplySyntaxError()
 				return
 			}
 			xx = true
 		case "ex":
-			if !px.IsZero() || i == len(client.args)-1 {
-				client.ReplySyntaxError()
+			if !px.IsZero() || i == len(c.args)-1 {
+				c.ReplySyntaxError()
 				return
 			}
 			i++
-			n, err := atoi(client.args[i])
+			n, err := atoi(c.args[i])
 			if err != nil {
-				client.ReplySyntaxError()
+				c.ReplySyntaxError()
 				return
 			}
 			ex = time.Now().Add(time.Duration(n) * time.Second)
 			expires = true
 			when = ex
 		case "px":
-			if !ex.IsZero() || i == len(client.args)-1 {
-				client.ReplySyntaxError()
+			if !ex.IsZero() || i == len(c.args)-1 {
+				c.ReplySyntaxError()
 				return
 			}
 			i++
-			n, err := atoi(client.args[i])
+			n, err := atoi(c.args[i])
 			if err != nil {
-				client.ReplySyntaxError()
+				c.ReplySyntaxError()
 				return
 			}
 			px = time.Now().Add(time.Duration(n) * time.Millisecond)
@@ -170,115 +170,115 @@ func setCommand(client *Client) {
 		}
 	}
 	if nx || xx {
-		_, ok := client.server.db.Get(client.args[1])
+		_, ok := c.db.Get(c.args[1])
 		if (ok && nx) || (!ok && xx) {
-			client.ReplyNull()
+			c.ReplyNull()
 			return
 		}
 	}
-	client.server.db.Set(client.args[1], client.args[2])
+	c.db.Set(c.args[1], c.args[2])
 	if expires {
-		client.server.db.Expire(client.args[1], when)
+		c.db.Expire(c.args[1], when)
 	}
-	client.ReplyString("OK")
-	client.dirty++
+	c.ReplyString("OK")
+	c.dirty++
 }
 
-func setnxCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func setnxCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
-	_, ok := client.server.db.Get(client.args[1])
+	_, ok := c.db.Get(c.args[1])
 	if ok {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
-	client.server.db.Set(client.args[1], client.args[2])
-	client.ReplyInt(1)
-	client.dirty++
+	c.db.Set(c.args[1], c.args[2])
+	c.ReplyInt(1)
+	c.dirty++
 }
 
-func msetCommand(client *Client) {
-	if len(client.args) < 3 || (len(client.args)-1)%2 != 0 {
-		client.ReplyAritryError()
+func msetCommand(c *client) {
+	if len(c.args) < 3 || (len(c.args)-1)%2 != 0 {
+		c.ReplyAritryError()
 		return
 	}
-	for i := 1; i < len(client.args); i += 2 {
-		client.server.db.Set(client.args[i+0], client.args[i+1])
-		client.dirty++
+	for i := 1; i < len(c.args); i += 2 {
+		c.db.Set(c.args[i+0], c.args[i+1])
+		c.dirty++
 	}
-	client.ReplyString("OK")
+	c.ReplyString("OK")
 }
 
-func msetnxCommand(client *Client) {
-	if len(client.args) < 3 || (len(client.args)-1)%2 != 0 {
-		client.ReplyAritryError()
+func msetnxCommand(c *client) {
+	if len(c.args) < 3 || (len(c.args)-1)%2 != 0 {
+		c.ReplyAritryError()
 		return
 	}
-	for i := 1; i < len(client.args); i += 2 {
-		_, ok := client.server.db.Get(client.args[1])
+	for i := 1; i < len(c.args); i += 2 {
+		_, ok := c.db.Get(c.args[1])
 		if ok {
-			client.ReplyInt(0)
+			c.ReplyInt(0)
 			return
 		}
 	}
-	for i := 1; i < len(client.args); i += 2 {
-		client.server.db.Set(client.args[i+0], client.args[i+1])
-		client.dirty++
+	for i := 1; i < len(c.args); i += 2 {
+		c.db.Set(c.args[i+0], c.args[i+1])
+		c.dirty++
 	}
-	client.ReplyInt(1)
+	c.ReplyInt(1)
 }
 
-func appendCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func appendCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.db.Get(client.args[1])
+	key, ok := c.db.Get(c.args[1])
 	if !ok {
-		client.server.db.Set(client.args[1], client.args[2])
-		client.ReplyInt(len(client.args[2]))
-		client.dirty++
+		c.db.Set(c.args[1], c.args[2])
+		c.ReplyInt(len(c.args[2]))
+		c.dirty++
 		return
 	}
 	switch s := key.(type) {
 	default:
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	case string:
-		s += client.args[2]
-		client.server.db.Set(client.args[1], s)
-		client.ReplyInt(len(s))
-		client.dirty++
+		s += c.args[2]
+		c.db.Set(c.args[1], s)
+		c.ReplyInt(len(s))
+		c.dirty++
 	}
 }
 
-func bitcountCommand(client *Client) {
+func bitcountCommand(c *client) {
 	var start, end int
 	var all bool
-	switch len(client.args) {
+	switch len(c.args) {
 	default:
-		client.ReplyAritryError()
+		c.ReplyAritryError()
 	case 2:
 		all = true
 	case 4:
-		n1, err1 := atoi(client.args[2])
-		n2, err2 := atoi(client.args[3])
+		n1, err1 := atoi(c.args[2])
+		n2, err2 := atoi(c.args[3])
 		if err1 != nil || err2 != nil {
-			client.ReplyError("value is not an integer or out of range")
+			c.ReplyError("value is not an integer or out of range")
 			return
 		}
 		start, end = int(n1), int(n2)
 	}
-	key, ok := client.server.db.Get(client.args[1])
+	key, ok := c.db.Get(c.args[1])
 	if !ok {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
 	switch s := key.(type) {
 	default:
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	case string:
 		var count int
@@ -304,24 +304,24 @@ func bitcountCommand(client *Client) {
 				count += int((c >> uint(j)) & 0x01)
 			}
 		}
-		client.ReplyInt(count)
+		c.ReplyInt(count)
 	}
 }
 
-func mgetCommand(client *Client) {
-	if len(client.args) < 2 {
-		client.ReplyAritryError()
+func mgetCommand(c *client) {
+	if len(c.args) < 2 {
+		c.ReplyAritryError()
 		return
 	}
-	client.ReplyMultiBulkLen(len(client.args) - 1)
-	for i := 1; i < len(client.args); i++ {
-		key, ok := client.server.db.Get(client.args[i])
+	c.ReplyMultiBulkLen(len(c.args) - 1)
+	for i := 1; i < len(c.args); i++ {
+		key, ok := c.db.Get(c.args[i])
 		if !ok {
-			client.ReplyNull()
+			c.ReplyNull()
 		} else if s, ok := key.(string); ok {
-			client.ReplyBulk(s)
+			c.ReplyBulk(s)
 		} else {
-			client.ReplyNull()
+			c.ReplyNull()
 		}
 	}
 }

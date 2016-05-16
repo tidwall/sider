@@ -1,18 +1,19 @@
 package server
 
 import (
+	"errors"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-func (s *Server) openAOF() {
+func (s *Server) openAOF() error {
 	f, err := os.OpenFile("appendonly.aof", os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
-		log.Fatalf("# %v", err)
+		return err
 	}
 	s.aof = f
 	go func() {
@@ -28,21 +29,49 @@ func (s *Server) openAOF() {
 			s.mu.Unlock()
 		}
 	}()
-	s.loadAOF()
+	return s.loadAOF()
+}
+
+func (s *Server) flushAOF() error {
+	if s.dbs[s.aofdbnum] != nil {
+		db := s.dbs[s.aofdbnum]
+		if db.aofbuf.Len() > 0 {
+			if _, err := s.aof.Write(db.aofbuf.Bytes()); err != nil {
+				return err
+			}
+			db.aofbuf.Reset()
+		}
+	}
+	for num, db := range s.dbs {
+		if db.aofbuf.Len() > 0 {
+			selstr := strconv.FormatInt(int64(num), 10)
+			lenstr := strconv.FormatInt(int64(len(selstr)), 10)
+			if _, err := s.aof.WriteString("*2\r\n$6\r\nselect\r\n$" + lenstr + "\r\n" + selstr + "\r\n"); err != nil {
+				return err
+			}
+			if _, err := s.aof.Write(db.aofbuf.Bytes()); err != nil {
+				return err
+			}
+			db.aofbuf.Reset()
+			s.aofdbnum = num
+		}
+	}
+	return nil
 }
 
 func (s *Server) closeAOF() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.flushAOF()
 	s.aof.Sync()
 	s.aof.Close()
 	s.aofclosed = true
 }
 
-func (s *Server) loadAOF() {
+func (s *Server) loadAOF() error {
 	start := time.Now()
-	rd := &CommandReader{rd: s.aof, rbuf: make([]byte, 64*1024)}
-	c := &Client{wr: ioutil.Discard, server: s}
+	rd := &commandReaderT{rd: s.aof, rbuf: make([]byte, 64*1024)}
+	c := &client{wr: ioutil.Discard, server: s}
 	var read int
 	for {
 		raw, args, _, err := rd.ReadCommand()
@@ -50,16 +79,19 @@ func (s *Server) loadAOF() {
 			if err == io.EOF {
 				break
 			}
-			log.Fatalf("# %v", err)
+			s.lwarningf("%v", err)
+			return err
 		}
 		c.args = args
 		c.raw = raw
+		c.db = s.selectDB(0)
 		if cmd, ok := s.commands[strings.ToLower(args[0])]; ok {
-			cmd.Func(c)
+			cmd.funct(c)
 		} else {
-			c.ReplyError("unknown command '" + args[0] + "'")
+			return errors.New("unknown command '" + args[0] + "'")
 		}
 		read++
 	}
-	log.Printf("* AOF loaded %d commands from disk: %.3f seconds", read, float64(time.Now().Sub(start))/float64(time.Second))
+	s.lnoticef("DB loaded from disk: %.3f seconds", float64(time.Now().Sub(start))/float64(time.Second))
+	return nil
 }

@@ -2,16 +2,16 @@ package server
 
 import "strconv"
 
-type Set struct {
+type setT struct {
 	m map[string]bool
 }
 
-func NewSet() *Set {
-	s := &Set{make(map[string]bool)}
+func NewSet() *setT {
+	s := &setT{make(map[string]bool)}
 	return s
 }
 
-func (s *Set) Add(member string) bool {
+func (s *setT) Add(member string) bool {
 	if !s.m[member] {
 		s.m[member] = true
 		return true
@@ -19,7 +19,7 @@ func (s *Set) Add(member string) bool {
 	return false
 }
 
-func (s *Set) Del(member string) bool {
+func (s *setT) Del(member string) bool {
 	if s.m[member] {
 		delete(s.m, member)
 		return true
@@ -27,7 +27,7 @@ func (s *Set) Del(member string) bool {
 	return false
 }
 
-func (s *Set) Ascend(iterator func(s string) bool) {
+func (s *setT) Ascend(iterator func(s string) bool) {
 	for v := range s.m {
 		if !iterator(v) {
 			return
@@ -35,7 +35,7 @@ func (s *Set) Ascend(iterator func(s string) bool) {
 	}
 }
 
-func (s1 *Set) Diff(s2 *Set) *Set {
+func (s1 *setT) Diff(s2 *setT) *setT {
 	s3 := NewSet()
 	for v1 := range s1.m {
 		found := false
@@ -52,7 +52,7 @@ func (s1 *Set) Diff(s2 *Set) *Set {
 	return s3
 }
 
-func (s1 *Set) Inter(s2 *Set) *Set {
+func (s1 *setT) Inter(s2 *setT) *setT {
 	s3 := NewSet()
 	for v1 := range s1.m {
 		found := false
@@ -69,7 +69,7 @@ func (s1 *Set) Inter(s2 *Set) *Set {
 	return s3
 }
 
-func (s1 *Set) Union(s2 *Set) *Set {
+func (s1 *setT) Union(s2 *setT) *setT {
 	s3 := NewSet()
 	for v := range s1.m {
 		s3.m[v] = true
@@ -80,7 +80,7 @@ func (s1 *Set) Union(s2 *Set) *Set {
 	return s3
 }
 
-func (s *Set) popRand(count int, pop bool) []string {
+func (s *setT) popRand(count int, pop bool) []string {
 	many := false
 	if count < 0 {
 		if pop {
@@ -113,114 +113,113 @@ func (s *Set) popRand(count int, pop bool) []string {
 	}
 	return res
 }
-func (s *Set) Pop(count int) []string {
+func (s *setT) Pop(count int) []string {
 	return s.popRand(count, true)
 }
-func (s *Set) Rand(count int) []string {
+func (s *setT) Rand(count int) []string {
 	return s.popRand(count, false)
 }
 
-func (s *Set) IsMember(member string) bool {
-	println(member, s.m[member])
+func (s *setT) IsMember(member string) bool {
 	return s.m[member]
 }
 
-func (s *Set) Len() int {
+func (s *setT) Len() int {
 	return len(s.m)
 }
 
-func saddCommand(client *Client) {
-	if len(client.args) < 3 {
-		client.ReplyAritryError()
+func saddCommand(c *client) {
+	if len(c.args) < 3 {
+		c.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.db.GetSet(client.args[1], true)
+	st, ok := c.db.GetSet(c.args[1], true)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	count := 0
-	for i := 2; i < len(client.args); i++ {
-		if st.Add(client.args[i]) {
-			client.dirty++
+	for i := 2; i < len(c.args); i++ {
+		if st.Add(c.args[i]) {
+			c.dirty++
 			count++
 		}
 	}
-	client.ReplyInt(count)
+	c.ReplyInt(count)
 
 }
 
-func scardCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func scardCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.db.GetSet(client.args[1], false)
+	st, ok := c.db.GetSet(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if st == nil {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
-	client.ReplyInt(st.Len())
+	c.ReplyInt(st.Len())
 }
-func smembersCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func smembersCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.db.GetSet(client.args[1], false)
+	st, ok := c.db.GetSet(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if st == nil {
-		client.ReplyMultiBulkLen(0)
+		c.ReplyMultiBulkLen(0)
 		return
 	}
-	client.ReplyMultiBulkLen(st.Len())
+	c.ReplyMultiBulkLen(st.Len())
 	st.Ascend(func(s string) bool {
-		client.ReplyBulk(s)
+		c.ReplyBulk(s)
 		return true
 	})
 }
-func sismembersCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func sismembersCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.db.GetSet(client.args[1], false)
+	st, ok := c.db.GetSet(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if st == nil {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
-	if st.IsMember(client.args[2]) {
-		client.ReplyInt(1)
+	if st.IsMember(c.args[2]) {
+		c.ReplyInt(1)
 	} else {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 	}
 }
 
-func sdiffinterunionGenericCommand(client *Client, diff, union bool, store bool) {
-	if (!store && len(client.args) < 2) || (store && len(client.args) < 3) {
-		client.ReplyAritryError()
+func sdiffinterunionGenericCommand(c *client, diff, union bool, store bool) {
+	if (!store && len(c.args) < 2) || (store && len(c.args) < 3) {
+		c.ReplyAritryError()
 		return
 	}
 	basei := 1
 	if store {
 		basei = 2
 	}
-	var st *Set
-	for i := basei; i < len(client.args); i++ {
-		stt, ok := client.server.db.GetSet(client.args[i], false)
+	var st *setT
+	for i := basei; i < len(c.args); i++ {
+		stt, ok := c.db.GetSet(c.args[i], false)
 		if !ok {
-			client.ReplyTypeError()
+			c.ReplyTypeError()
 			return
 		}
 		if stt == nil {
@@ -245,170 +244,170 @@ func sdiffinterunionGenericCommand(client *Client, diff, union bool, store bool)
 	}
 	if store {
 		if st == nil || st.Len() == 0 {
-			_, ok := client.server.db.Del(client.args[1])
+			_, ok := c.db.Del(c.args[1])
 			if ok {
-				client.dirty++
+				c.dirty++
 			}
-			client.ReplyInt(0)
+			c.ReplyInt(0)
 		} else {
-			client.server.db.Set(client.args[1], st)
-			client.dirty++
-			client.ReplyInt(st.Len())
+			c.db.Set(c.args[1], st)
+			c.dirty++
+			c.ReplyInt(st.Len())
 		}
 	} else {
 		if st == nil {
-			client.ReplyMultiBulkLen(0)
+			c.ReplyMultiBulkLen(0)
 			return
 		}
-		client.ReplyMultiBulkLen(st.Len())
+		c.ReplyMultiBulkLen(st.Len())
 		st.Ascend(func(s string) bool {
-			client.ReplyBulk(s)
+			c.ReplyBulk(s)
 			return true
 		})
 	}
 }
-func sdiffCommand(client *Client) {
-	sdiffinterunionGenericCommand(client, true, false, false)
+func sdiffCommand(c *client) {
+	sdiffinterunionGenericCommand(c, true, false, false)
 }
-func sinterCommand(client *Client) {
-	sdiffinterunionGenericCommand(client, false, false, false)
+func sinterCommand(c *client) {
+	sdiffinterunionGenericCommand(c, false, false, false)
 }
-func sunionCommand(client *Client) {
-	sdiffinterunionGenericCommand(client, false, true, false)
+func sunionCommand(c *client) {
+	sdiffinterunionGenericCommand(c, false, true, false)
 }
-func sdiffstoreCommand(client *Client) {
-	sdiffinterunionGenericCommand(client, true, false, true)
+func sdiffstoreCommand(c *client) {
+	sdiffinterunionGenericCommand(c, true, false, true)
 }
-func sinterstoreCommand(client *Client) {
-	sdiffinterunionGenericCommand(client, false, false, true)
+func sinterstoreCommand(c *client) {
+	sdiffinterunionGenericCommand(c, false, false, true)
 }
-func sunionstoreCommand(client *Client) {
-	sdiffinterunionGenericCommand(client, false, true, true)
+func sunionstoreCommand(c *client) {
+	sdiffinterunionGenericCommand(c, false, true, true)
 }
 
-func srandmemberpopGenericCommand(client *Client, pop bool) {
-	if len(client.args) < 2 || len(client.args) > 3 {
-		client.ReplyAritryError()
+func srandmemberpopGenericCommand(c *client, pop bool) {
+	if len(c.args) < 2 || len(c.args) > 3 {
+		c.ReplyAritryError()
 		return
 	}
 	countSpecified := false
 	count := 1
-	if len(client.args) > 2 {
-		n, err := strconv.ParseInt(client.args[2], 10, 64)
+	if len(c.args) > 2 {
+		n, err := strconv.ParseInt(c.args[2], 10, 64)
 		if err != nil {
-			client.ReplyInvalidIntError()
+			c.ReplyInvalidIntError()
 			return
 		}
 		if pop && n < 0 {
-			client.ReplyError("index out of range")
+			c.ReplyError("index out of range")
 			return
 		}
 		count = int(n)
 		countSpecified = true
 	}
-	st, ok := client.server.db.GetSet(client.args[1], false)
+	st, ok := c.db.GetSet(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if st == nil {
 		if countSpecified {
-			client.ReplyMultiBulkLen(0)
+			c.ReplyMultiBulkLen(0)
 		} else {
-			client.ReplyNull()
+			c.ReplyNull()
 		}
 		return
 	}
 	var res []string
 	if pop {
 		res = st.Pop(count)
-		client.dirty += len(res)
+		c.dirty += len(res)
 	} else {
 		res = st.Rand(count)
 	}
 	if countSpecified {
-		client.ReplyMultiBulkLen(len(res))
+		c.ReplyMultiBulkLen(len(res))
 	} else if len(res) == 0 {
-		client.ReplyNull()
+		c.ReplyNull()
 	}
 	for _, s := range res {
-		client.ReplyBulk(s)
+		c.ReplyBulk(s)
 		if !countSpecified {
 			break
 		}
 	}
 	if pop && st.Len() == 0 {
-		client.server.db.Del(client.args[1])
+		c.db.Del(c.args[1])
 	}
 }
 
-func srandmemberCommand(client *Client) {
-	srandmemberpopGenericCommand(client, false)
+func srandmemberCommand(c *client) {
+	srandmemberpopGenericCommand(c, false)
 }
 
-func spopCommand(client *Client) {
-	srandmemberpopGenericCommand(client, true)
+func spopCommand(c *client) {
+	srandmemberpopGenericCommand(c, true)
 }
 
-func sremCommand(client *Client) {
-	if len(client.args) < 3 {
-		client.ReplyAritryError()
+func sremCommand(c *client) {
+	if len(c.args) < 3 {
+		c.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.db.GetSet(client.args[1], false)
+	st, ok := c.db.GetSet(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if st == nil {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
 	var count int
-	for i := 2; i < len(client.args); i++ {
-		if st.Del(client.args[i]) {
+	for i := 2; i < len(c.args); i++ {
+		if st.Del(c.args[i]) {
 			count++
-			client.dirty++
+			c.dirty++
 		}
 	}
 	if st.Len() == 0 {
-		client.server.db.Del(client.args[1])
+		c.db.Del(c.args[1])
 	}
-	client.ReplyInt(count)
+	c.ReplyInt(count)
 }
 
-func smoveCommand(client *Client) {
-	if len(client.args) != 4 {
-		client.ReplyAritryError()
+func smoveCommand(c *client) {
+	if len(c.args) != 4 {
+		c.ReplyAritryError()
 		return
 	}
-	src, ok := client.server.db.GetSet(client.args[1], false)
+	src, ok := c.db.GetSet(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
-	dst, ok := client.server.db.GetSet(client.args[2], false)
+	dst, ok := c.db.GetSet(c.args[2], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if src == nil {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
-	if !src.Del(client.args[3]) {
-		client.ReplyInt(0)
+	if !src.Del(c.args[3]) {
+		c.ReplyInt(0)
 		return
 	}
 	if dst == nil {
 		dst = NewSet()
-		dst.Add(client.args[3])
-		client.server.db.Set(client.args[2], dst)
-		client.ReplyInt(1)
-		client.dirty++
+		dst.Add(c.args[3])
+		c.db.Set(c.args[2], dst)
+		c.ReplyInt(1)
+		c.dirty++
 		return
 	}
-	dst.Add(client.args[3])
-	client.ReplyInt(1)
-	client.dirty++
+	dst.Add(c.args[3])
+	c.ReplyInt(1)
+	c.dirty++
 }

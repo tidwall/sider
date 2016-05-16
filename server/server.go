@@ -2,228 +2,173 @@ package server
 
 import (
 	"bufio"
-	"bytes"
-	"log"
+	"fmt"
+	"io"
 	"net"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 )
 
 func (s *Server) commandTable() {
-	// "r" lock for reading
-	// "w" lock for writing
-	// "+" write to aof
-	s.register("get", getCommand, "r")           // Strings
-	s.register("getset", getsetCommand, "w+")    // Strings
-	s.register("set", setCommand, "w+")          // Strings
-	s.register("append", appendCommand, "w+")    // Strings
-	s.register("bitcount", bitcountCommand, "r") // Strings
-	s.register("incr", incrCommand, "w+")        // Strings
-	s.register("incrby", incrbyCommand, "w+")    // Strings
-	s.register("decr", decrCommand, "w+")        // Strings
-	s.register("decrby", decrbyCommand, "w+")    // Strings
-	s.register("mget", mgetCommand, "r")         // Strings
-	s.register("setnx", setnxCommand, "w+")      // Strings
-	s.register("mset", msetCommand, "w+")        // Strings
-	s.register("msetnx", msetnxCommand, "w+")    // Strings
+	// "+" append aof
+	s.register("get", getCommand, "")           // Strings
+	s.register("getset", getsetCommand, "+")    // Strings
+	s.register("set", setCommand, "+")          // Strings
+	s.register("append", appendCommand, "+")    // Strings
+	s.register("bitcount", bitcountCommand, "") // Strings
+	s.register("incr", incrCommand, "+")        // Strings
+	s.register("incrby", incrbyCommand, "+")    // Strings
+	s.register("decr", decrCommand, "+")        // Strings
+	s.register("decrby", decrbyCommand, "+")    // Strings
+	s.register("mget", mgetCommand, "")         // Strings
+	s.register("setnx", setnxCommand, "+")      // Strings
+	s.register("mset", msetCommand, "+")        // Strings
+	s.register("msetnx", msetnxCommand, "+")    // Strings
 
-	s.register("lpush", lpushCommand, "w+")  // Lists
-	s.register("rpush", rpushCommand, "w+")  // Lists
-	s.register("lrange", lrangeCommand, "r") // Lists
-	s.register("llen", llenCommand, "r")     // Lists
-	s.register("lpop", lpopCommand, "w+")    // Lists
-	s.register("rpop", rpopCommand, "w+")    // Lists
-	s.register("lindex", lindexCommand, "r") // Lists
-	s.register("lrem", lremCommand, "w+")    // Lists
-	s.register("lset", lsetCommand, "w+")    // Lists
-	s.register("ltrim", ltrimCommand, "w+")  // Lists
+	s.register("lpush", lpushCommand, "+")  // Lists
+	s.register("rpush", rpushCommand, "+")  // Lists
+	s.register("lrange", lrangeCommand, "") // Lists
+	s.register("llen", llenCommand, "")     // Lists
+	s.register("lpop", lpopCommand, "+")    // Lists
+	s.register("rpop", rpopCommand, "+")    // Lists
+	s.register("lindex", lindexCommand, "") // Lists
+	s.register("lrem", lremCommand, "+")    // Lists
+	s.register("lset", lsetCommand, "+")    // Lists
+	s.register("ltrim", ltrimCommand, "+")  // Lists
 
-	s.register("sadd", saddCommand, "w+")               // Sets
-	s.register("scard", scardCommand, "r")              // Sets
-	s.register("smembers", smembersCommand, "r")        // Sets
-	s.register("sismember", sismembersCommand, "r")     // Sets
-	s.register("sdiff", sdiffCommand, "r")              // Sets
-	s.register("sinter", sinterCommand, "r")            // Sets
-	s.register("sunion", sunionCommand, "r")            // Sets
-	s.register("sdiffstore", sdiffstoreCommand, "w+")   // Sets
-	s.register("sinterstore", sinterstoreCommand, "w+") // Sets
-	s.register("sunionstore", sunionstoreCommand, "w+") // Sets
-	s.register("spop", spopCommand, "w+")               // Sets
-	s.register("srandmember", srandmemberCommand, "r")  // Sets
-	s.register("srem", sremCommand, "w+")               // Sets
-	s.register("smove", smoveCommand, "w+")             // Sets
+	s.register("sadd", saddCommand, "+")               // Sets
+	s.register("scard", scardCommand, "")              // Sets
+	s.register("smembers", smembersCommand, "")        // Sets
+	s.register("sismember", sismembersCommand, "")     // Sets
+	s.register("sdiff", sdiffCommand, "")              // Sets
+	s.register("sinter", sinterCommand, "")            // Sets
+	s.register("sunion", sunionCommand, "")            // Sets
+	s.register("sdiffstore", sdiffstoreCommand, "+")   // Sets
+	s.register("sinterstore", sinterstoreCommand, "+") // Sets
+	s.register("sunionstore", sunionstoreCommand, "+") // Sets
+	s.register("spop", spopCommand, "+")               // Sets
+	s.register("srandmember", srandmemberCommand, "")  // Sets
+	s.register("srem", sremCommand, "+")               // Sets
+	s.register("smove", smoveCommand, "+")             // Sets
 
-	s.register("echo", echoCommand, "") // Connection
-	s.register("ping", pingCommand, "") // Connection
+	s.register("echo", echoCommand, "")     // Connection
+	s.register("ping", pingCommand, "")     // Connection
+	s.register("select", selectCommand, "") // Connection
 
-	s.register("flushdb", flushdbCommand, "w+")   // Server
-	s.register("flushall", flushallCommand, "w+") // Server
-	s.register("dbsize", dbsizeCommand, "r")      // Server
+	s.register("flushdb", flushdbCommand, "+")   // Server
+	s.register("flushall", flushallCommand, "+") // Server
+	s.register("dbsize", dbsizeCommand, "")      // Server
+	s.register("debug", debugCommand, "")        // Server
 
-	s.register("del", delCommand, "w+")            // Keys
-	s.register("keys", keysCommand, "r")           // Keys
-	s.register("rename", renameCommand, "w+")      // Keys
-	s.register("renamenx", renamenxCommand, "w+")  // Keys
-	s.register("type", typeCommand, "r")           // Keys
-	s.register("randomkey", randomkeyCommand, "r") // Keys
-	s.register("exists", existsCommand, "r")       // Keys
-	s.register("expire", expireCommand, "w+")      // Keys
-	s.register("ttl", ttlCommand, "r")             // Keys
+	s.register("del", delCommand, "+")            // Keys
+	s.register("keys", keysCommand, "")           // Keys
+	s.register("rename", renameCommand, "+")      // Keys
+	s.register("renamenx", renamenxCommand, "+")  // Keys
+	s.register("type", typeCommand, "")           // Keys
+	s.register("randomkey", randomkeyCommand, "") // Keys
+	s.register("exists", existsCommand, "")       // Keys
+	s.register("expire", expireCommand, "+")      // Keys
+	s.register("ttl", ttlCommand, "")             // Keys
 
 }
 
-type Key struct {
-	Name    string
-	Expires time.Time
-	Value   interface{}
+type commandT struct {
+	name  string
+	aof   bool
+	funct func(c *client)
 }
 
-type Command struct {
-	Name  string
-	Write bool
-	Read  bool
-	AOF   bool
-	Func  func(client *Client)
+// Options alter the behavior of the server.
+type Options struct {
+	LogWriter        io.Writer
+	IgnoreLogDebug   bool
+	IgnoreLogVerbose bool
+	IgnoreLogNotice  bool
+	IgnoreLogWarning bool
 }
 
-type Config struct {
-	AOFSync int // 0 = never, 1 = everysecond, 2 = always
-}
-
+// Server represents a server object.
 type Server struct {
-	mu          sync.RWMutex
-	commands    map[string]*Command
-	db          *DB
-	config      Config
-	aof         *os.File
-	aofbuf      bytes.Buffer
-	aofclosed   bool
-	follower    bool
+	mu       sync.Mutex
+	l        net.Listener
+	options  *Options
+	commands map[string]*commandT
+	dbs      map[int]*dbT
+	follower bool
+
 	expires     map[string]time.Time
 	expiresdone bool
+
+	aof       *os.File // the aof file handle
+	aofdbnum  int      // the db num of the last "select" written to the aof
+	aofclosed bool     // flag for when the aof file is closed
+
+	ferr     error      // a fatal error. setting this should happen in the fatalError function
+	ferrcond *sync.Cond // synchronize the watch
+	ferrdone bool       // flag for when the fatal error watch is complete
 }
 
-func (s *Server) register(commandName string, f func(client *Client), opts string) {
-	var cmd Command
-	cmd.Name = commandName
-	cmd.Func = f
+// register is called from the commandTable() function. The command map will contains
+// two entries assigned to the same command. One with an all uppercase key and one with
+// an all lower case key.
+func (s *Server) register(commandName string, f func(c *client), opts string) {
+	var cmd commandT
+	cmd.name = commandName
+	cmd.funct = f
 	for _, c := range []byte(opts) {
 		switch c {
-		case 'r':
-			if !cmd.Write {
-				cmd.Read = true
-			}
-		case 'w':
-			cmd.Write = true
-			cmd.Read = false
 		case '+':
-			cmd.Write = true
-			cmd.Read = false
-			cmd.AOF = true
+			cmd.aof = true
 		}
 	}
 	s.commands[strings.ToLower(commandName)] = &cmd
 	s.commands[strings.ToUpper(commandName)] = &cmd
 }
 
-// func (s *Server) GetKey(name string) (interface{}, bool) {
-// 	key, ok := s.keys[name]
-// 	if !ok {
-// 		return nil, false
-// 	}
-// 	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
-// 		return nil, false
-// 	}
-// 	return key.Value, true
-// }
+// The log format is described at http://build47.com/redis-log-format-levels/
+func (s *Server) lf(c byte, format string, args ...interface{}) {
+	fmt.Fprintf(
+		s.options.LogWriter,
+		"%d:M %s %c %s\n",
+		os.Getpid(),
+		time.Now().Format("2 Jan 15:04:05.000"),
+		c,
+		fmt.Sprintf(format, args...),
+	)
+}
+func (s *Server) ldebugf(format string, args ...interface{}) {
+	if !s.options.IgnoreLogDebug {
+		s.lf('.', format, args...)
+	}
+}
+func (s *Server) lverbosf(format string, args ...interface{}) {
+	if !s.options.IgnoreLogVerbose {
+		s.lf('-', format, args...)
+	}
+}
+func (s *Server) lnoticef(format string, args ...interface{}) {
+	if !s.options.IgnoreLogNotice {
+		s.lf('*', format, args...)
+	}
+}
+func (s *Server) lwarningf(format string, args ...interface{}) {
+	if !s.options.IgnoreLogWarning {
+		s.lf('#', format, args...)
+	}
+}
 
-// func (s *Server) GetKeyExpires(name string) (interface{}, time.Time, bool) {
-// 	key, ok := s.keys[name]
-// 	if !ok {
-// 		return nil, time.Time{}, false
-// 	}
-// 	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
-// 		return nil, time.Time{}, false
-// 	}
-// 	return key.Value, key.Expires, true
-// }
+func (s *Server) fatalError(err error) {
+	s.ferrcond.L.Lock()
+	if s.ferr == nil {
+		s.ferr = err
+	}
+	s.ferrcond.Broadcast()
+	s.ferrcond.L.Unlock()
+}
 
-// func (s *Server) GetKeyList(name string, create bool) (*list.List, bool) {
-// 	key, ok := s.GetKey(name)
-// 	if ok {
-// 		switch v := key.(type) {
-// 		default:
-// 			return nil, false
-// 		case *list.List:
-// 			return v, true
-// 		}
-// 	}
-// 	if create {
-// 		l := list.New()
-// 		s.SetKey(name, l)
-// 		return l, true
-// 	}
-// 	return nil, true
-// }
-
-// func (s *Server) GetKeySet(name string, create bool) (*Set, bool) {
-// 	key, ok := s.GetKey(name)
-// 	if ok {
-// 		switch v := key.(type) {
-// 		default:
-// 			return nil, false
-// 		case *Set:
-// 			return v, true
-// 		}
-// 	}
-// 	if create {
-// 		st := NewSet()
-// 		s.SetKey(name, st)
-// 		return st, true
-// 	}
-// 	return nil, true
-// }
-
-// func (s *Server) SetKey(name string, value interface{}) {
-// 	delete(s.expires, name)
-// 	s.keys[name] = &Key{Name: name, Value: value}
-// }
-
-// func (s *Server) UpdateKey(name string, value interface{}) {
-// 	key, ok := s.keys[name]
-// 	if ok {
-// 		key.Value = value
-// 	} else {
-// 		s.SetKey(name, value)
-// 	}
-// }
-
-// func (s *Server) DelKey(name string) (interface{}, bool) {
-// 	key, ok := s.keys[name]
-// 	if !ok {
-// 		return nil, false
-// 	}
-// 	delete(s.keys, name)
-// 	if !key.Expires.IsZero() && time.Now().After(key.Expires) {
-// 		return nil, false
-// 	}
-// 	delete(s.expires, name)
-// 	return key.Value, true
-// }
-
-// func (s *Server) Expire(name string, when time.Time) bool {
-// 	key, ok := s.keys[name]
-// 	if !ok {
-// 		return false
-// 	}
-// 	key.Expires = when
-// 	s.expires[name] = when
-// 	return true
-// }
-
+//debug, verbose, notice, and warning.
 // // startExpireLoop runs a background routine which watches for exipred keys
 // // and forces their removal from the database. 100ms resolution.
 // func (s *Server) startExpireLoop() {
@@ -274,41 +219,113 @@ func (s *Server) register(commandName string, f func(client *Client), opts strin
 // 	s.mu.Unlock()
 // }
 
-func Start(addr string) {
-	s := &Server{
-		commands: make(map[string]*Command),
-		db:       NewDB(),
-		expires:  make(map[string]time.Time),
+// startFatalErrorWatch
+func (s *Server) startFatalErrorWatch() {
+	go func() {
+		for {
+			s.ferrcond.L.Lock()
+			if s.ferrdone {
+				s.ferrcond.L.Unlock()
+				return
+			}
+			if s.ferr != nil {
+				s.l.Close()
+				s.ferrdone = true
+				return
+			}
+			s.ferrcond.L.Unlock()
+		}
+	}()
+}
+
+func (s *Server) stopFatalErrorWatch() {
+	s.ferrcond.L.Lock()
+	s.ferrdone = true
+	s.ferrcond.Broadcast()
+	s.ferrcond.L.Unlock()
+}
+
+func (s *Server) selectDB(num int) *dbT {
+	db, ok := s.dbs[num]
+	if !ok {
+		db = NewDB()
+		s.dbs[num] = db
 	}
+	return db
+}
+
+func fillOptions(options *Options) *Options {
+	if options == nil {
+		options = &Options{}
+	}
+	if options.LogWriter == nil {
+		options.LogWriter = os.Stderr
+	}
+	return options
+}
+
+func Start(addr string, options *Options) (err error) {
+	s := &Server{
+		commands: make(map[string]*commandT),
+		dbs:      make(map[int]*dbT),
+		expires:  make(map[string]time.Time),
+		aofdbnum: -1,
+		options:  fillOptions(options),
+		ferrcond: sync.NewCond(&sync.Mutex{}),
+	}
+	defer func() {
+		if err == nil && s.ferr != nil {
+			err = s.ferr
+		}
+	}()
+	s.lwarningf("Server started, Sider version 999.999.9999")
 	s.commandTable()
-	s.openAOF()
+	if err = s.openAOF(); err != nil {
+		s.lwarningf("%v", err)
+		return err
+	}
 	defer s.closeAOF()
+	defer s.flushAOF()
+
 	// s.startExpireLoop()
 	// defer s.stopExpireLoop()
 
-	l, err := net.Listen("tcp", addr)
+	s.l, err = net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("# %v", err)
+		s.lwarningf("%v", err)
+		return err
 	}
-	defer l.Close()
+	defer s.l.Close()
+
+	s.lnoticef("The server is now ready to accept connections on port %s", s.l.Addr().String()[strings.LastIndex(s.l.Addr().String(), ":")+1:])
+
+	// Start watching for fatal errors.
+	s.startFatalErrorWatch()
+	defer s.stopFatalErrorWatch()
+
 	for {
-		conn, err := l.Accept()
+		conn, err := s.l.Accept()
 		if err != nil {
-			log.Printf("# %v", err)
+			s.lwarningf("%v", err)
 			continue
 		}
 		go handleConn(conn, s)
 	}
 }
 
-func autoCase(command string) string {
+// autocase will return an ascii string in uppercase or lowercase, but never
+// mixed case. It's quicker than calling strings.(ToLower/ToUpper).
+// The thinking is that commands are usually sent in all upper or
+// all lower case, such as 'GET' or 'get'. But, rarely 'Get'.
+func autocase(command string) string {
 	for i := 0; i < len(command); i++ {
 		c := command[i]
 		if c >= 'A' && c <= 'Z' {
+			i++
 			for ; i < len(command); i++ {
 				c = command[i]
 				if c >= 'a' && c <= 'z' {
-					return strings.ToLower(command)
+					return strings.ToUpper(command)
 				}
 			}
 			break
@@ -331,8 +348,11 @@ func handleConn(conn net.Conn, server *Server) {
 	rd := NewCommandReader(conn)
 	wr := bufio.NewWriter(conn)
 	defer wr.Flush()
-	c := &Client{wr: wr, server: server}
+	c := &client{wr: wr, server: server}
 	defer c.flushAOF()
+	server.mu.Lock()
+	c.db = server.selectDB(0)
+	server.mu.Unlock()
 	var flush bool
 	var err error
 	for {
@@ -346,12 +366,12 @@ func handleConn(conn net.Conn, server *Server) {
 		if len(c.args) == 0 {
 			continue
 		}
-		command := autoCase(c.args[0])
+		command := autocase(c.args[0])
 		if cmd, ok := server.commands[command]; ok {
 			server.mu.Lock()
-			cmd.Func(c)
-			if c.dirty > 0 && cmd.AOF {
-				server.aofbuf.Write(c.raw)
+			cmd.funct(c)
+			if c.dirty > 0 && cmd.aof {
+				c.db.aofbuf.Write(c.raw)
 			}
 			server.mu.Unlock()
 		} else {
@@ -364,7 +384,9 @@ func handleConn(conn net.Conn, server *Server) {
 			}
 		}
 		if flush {
-			c.flushAOF()
+			if err := c.flushAOF(); err != nil {
+				return
+			}
 			if err := wr.Flush(); err != nil {
 				return
 			}
@@ -373,32 +395,30 @@ func handleConn(conn net.Conn, server *Server) {
 }
 
 /* Commands */
-func flushdbCommand(client *Client) {
-	if len(client.args) != 1 {
-		client.ReplyAritryError()
+func flushdbCommand(c *client) {
+	if len(c.args) != 1 {
+		c.ReplyAritryError()
 		return
 	}
-	client.server.db.Flush()
-	client.ReplyString("OK")
-	client.dirty++
-	go runtime.GC()
+	c.db.Flush()
+	c.ReplyString("OK")
+	c.dirty++
 }
 
-func flushallCommand(client *Client) {
-	if len(client.args) != 1 {
-		client.ReplyAritryError()
+func flushallCommand(c *client) {
+	if len(c.args) != 1 {
+		c.ReplyAritryError()
 		return
 	}
-	client.server.db.Flush()
-	client.ReplyString("OK")
-	client.dirty++
-	go runtime.GC()
+	c.db.Flush()
+	c.ReplyString("OK")
+	c.dirty++
 }
 
-func dbsizeCommand(client *Client) {
-	if len(client.args) != 1 {
-		client.ReplyAritryError()
+func dbsizeCommand(c *client) {
+	if len(c.args) != 1 {
+		c.ReplyAritryError()
 		return
 	}
-	client.ReplyInt(client.server.db.Len())
+	c.ReplyInt(c.db.Len())
 }

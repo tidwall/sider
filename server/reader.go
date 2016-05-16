@@ -15,7 +15,7 @@ func (err *protocolError) Error() string {
 	return "Protocol error: " + err.msg
 }
 
-type CommandReader struct {
+type commandReaderT struct {
 	rd     io.Reader
 	rbuf   []byte
 	buf    []byte
@@ -23,8 +23,8 @@ type CommandReader struct {
 	args   []string
 }
 
-func NewCommandReader(rd io.Reader) *CommandReader {
-	return &CommandReader{
+func NewCommandReader(rd io.Reader) *commandReaderT {
+	return &commandReaderT{
 		rd:   rd,
 		rbuf: make([]byte, 64*1024),
 	}
@@ -44,7 +44,7 @@ func autoConvertArgsToMultiBulk(raw []byte, args []string, telnet, flush bool) (
 	return raw, args, flush, nil
 }
 
-func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, err error) {
+func (rd *commandReaderT) ReadCommand() (raw []byte, args []string, flush bool, err error) {
 	if len(rd.buf) > 0 {
 		// there is already data in the buffer, do we have enough to make a full command?
 		raw, args, telnet, err := rd.readBufferedCommand(rd.buf)
@@ -88,7 +88,7 @@ func (rd *CommandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 	return rd.ReadCommand()
 }
 
-func (rd *CommandReader) readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
+func (rd *commandReaderT) readBufferedCommand(data []byte) ([]byte, []string, bool, error) {
 	if data[0] != '*' {
 		return readBufferedTelnetCommand(data)
 	}

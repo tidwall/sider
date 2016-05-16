@@ -5,73 +5,73 @@ import (
 	"strconv"
 )
 
-func lpushCommand(client *Client) {
-	if len(client.args) < 3 {
-		client.ReplyAritryError()
+func lpushCommand(c *client) {
+	if len(c.args) < 3 {
+		c.ReplyAritryError()
 		return
 	}
 
 	var l *list.List
-	key, ok := client.server.db.Get(client.args[1])
+	key, ok := c.db.Get(c.args[1])
 	if ok {
 		switch v := key.(type) {
 		default:
-			client.ReplyTypeError()
+			c.ReplyTypeError()
 			return
 		case *list.List:
 			l = v
 		}
 	} else {
 		l = list.New()
-		client.server.db.Set(client.args[1], l)
+		c.db.Set(c.args[1], l)
 	}
-	for i := 2; i < len(client.args); i++ {
-		l.PushFront(client.args[i])
+	for i := 2; i < len(c.args); i++ {
+		l.PushFront(c.args[i])
 	}
-	client.ReplyInt(l.Len())
-	client.dirty++
+	c.ReplyInt(l.Len())
+	c.dirty++
 }
 
-func rpushCommand(client *Client) {
-	if len(client.args) < 3 {
-		client.ReplyAritryError()
+func rpushCommand(c *client) {
+	if len(c.args) < 3 {
+		c.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.db.GetList(client.args[1], true)
+	l, ok := c.db.GetList(c.args[1], true)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
-	for i := 2; i < len(client.args); i++ {
-		l.PushBack(client.args[i])
+	for i := 2; i < len(c.args); i++ {
+		l.PushBack(c.args[i])
 	}
-	client.ReplyInt(l.Len())
-	client.dirty++
+	c.ReplyInt(l.Len())
+	c.dirty++
 }
 
-func lrangeCommand(client *Client) {
-	if len(client.args) != 4 {
-		client.ReplyAritryError()
+func lrangeCommand(c *client) {
+	if len(c.args) != 4 {
+		c.ReplyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(client.args[2], 10, 64)
+	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
-	en, err := strconv.ParseInt(client.args[3], 10, 64)
+	en, err := strconv.ParseInt(c.args[3], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
 
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyMultiBulkLen(0)
+		c.ReplyMultiBulkLen(0)
 		return
 	}
 
@@ -89,14 +89,14 @@ func lrangeCommand(client *Client) {
 	if en < 0 {
 		stop = llen + int(en)
 		if stop < 0 {
-			client.ReplyMultiBulkLen(0)
+			c.ReplyMultiBulkLen(0)
 			return
 		}
 	} else {
 		stop = int(en)
 	}
 	if start > stop || start >= llen || llen == 0 {
-		client.ReplyMultiBulkLen(0)
+		c.ReplyMultiBulkLen(0)
 		return
 	}
 
@@ -135,97 +135,97 @@ func lrangeCommand(client *Client) {
 		i++
 	}
 
-	client.ReplyMultiBulkLen(len(res))
+	c.ReplyMultiBulkLen(len(res))
 	for _, s := range res {
-		client.ReplyBulk(s)
+		c.ReplyBulk(s)
 	}
 }
 
-func llenCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func llenCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
-	client.ReplyInt(l.Len())
+	c.ReplyInt(l.Len())
 }
 
-func lpopCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func lpopCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyNull()
+		c.ReplyNull()
 	} else if l.Len() > 0 {
 		el := l.Front()
 		l.Remove(el)
 		if l.Len() == 0 {
-			client.server.db.Del(client.args[1])
+			c.db.Del(c.args[1])
 		}
-		client.ReplyBulk(el.Value.(string))
-		client.dirty++
+		c.ReplyBulk(el.Value.(string))
+		c.dirty++
 	} else {
-		client.ReplyNull()
+		c.ReplyNull()
 	}
 }
 
-func rpopCommand(client *Client) {
-	if len(client.args) != 2 {
-		client.ReplyAritryError()
+func rpopCommand(c *client) {
+	if len(c.args) != 2 {
+		c.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyNull()
+		c.ReplyNull()
 	} else if l.Len() > 0 {
 		el := l.Back()
 		l.Remove(el)
 		if l.Len() == 0 {
-			client.server.db.Del(client.args[1])
+			c.db.Del(c.args[1])
 		}
-		client.ReplyBulk(el.Value.(string))
-		client.dirty++
+		c.ReplyBulk(el.Value.(string))
+		c.dirty++
 	} else {
-		client.ReplyNull()
+		c.ReplyNull()
 	}
 }
 
-func lindexCommand(client *Client) {
-	if len(client.args) != 3 {
-		client.ReplyAritryError()
+func lindexCommand(c *client) {
+	if len(c.args) != 3 {
+		c.ReplyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(client.args[2], 10, 64)
+	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
 
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyNull()
+		c.ReplyNull()
 		return
 	}
 	llen := l.Len()
@@ -237,7 +237,7 @@ func lindexCommand(client *Client) {
 	}
 
 	if start < 0 || start >= llen || llen == 0 {
-		client.ReplyNull()
+		c.ReplyNull()
 		return
 	}
 
@@ -249,7 +249,7 @@ func lindexCommand(client *Client) {
 		el = l.Back()
 		for el != nil {
 			if i == start {
-				client.ReplyBulk(el.Value.(string))
+				c.ReplyBulk(el.Value.(string))
 				return
 			}
 			el = el.Prev()
@@ -261,37 +261,37 @@ func lindexCommand(client *Client) {
 		el = l.Front()
 		for el != nil {
 			if i == start {
-				client.ReplyBulk(el.Value.(string))
+				c.ReplyBulk(el.Value.(string))
 				return
 			}
 			el = el.Next()
 			i++
 		}
 	}
-	client.ReplyNull()
+	c.ReplyNull()
 }
 
-func lremCommand(client *Client) {
-	if len(client.args) != 4 {
-		client.ReplyAritryError()
+func lremCommand(c *client) {
+	if len(c.args) != 4 {
+		c.ReplyAritryError()
 		return
 	}
-	n, err := strconv.ParseInt(client.args[2], 10, 64)
+	n, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyInt(0)
+		c.ReplyInt(0)
 		return
 	}
 	count := 0
-	v := client.args[3]
+	v := c.args[3]
 	if n == 0 {
 		el := l.Front()
 		for el != nil {
@@ -299,7 +299,7 @@ func lremCommand(client *Client) {
 			if el.Value.(string) == v {
 				l.Remove(el)
 				count++
-				client.dirty++
+				c.dirty++
 			}
 			el = next
 		}
@@ -313,7 +313,7 @@ func lremCommand(client *Client) {
 			if el.Value.(string) == v {
 				l.Remove(el)
 				count++
-				client.dirty++
+				c.dirty++
 				n--
 			}
 			el = next
@@ -329,32 +329,32 @@ func lremCommand(client *Client) {
 			if el.Value.(string) == v {
 				l.Remove(el)
 				count++
-				client.dirty++
+				c.dirty++
 				n--
 			}
 			el = next
 		}
 	}
-	client.ReplyInt(count)
+	c.ReplyInt(count)
 }
 
-func lsetCommand(client *Client) {
-	if len(client.args) != 4 {
-		client.ReplyAritryError()
+func lsetCommand(c *client) {
+	if len(c.args) != 4 {
+		c.ReplyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(client.args[2], 10, 64)
+	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyNoSuchKeyError()
+		c.ReplyNoSuchKeyError()
 		return
 	}
 
@@ -366,7 +366,7 @@ func lsetCommand(client *Client) {
 		start = int(sn)
 	}
 	if start < 0 || start >= llen || llen == 0 {
-		client.ReplyError("index out of range")
+		c.ReplyError("index out of range")
 		return
 	}
 
@@ -378,9 +378,9 @@ func lsetCommand(client *Client) {
 		el = l.Back()
 		for el != nil {
 			if i == start {
-				el.Value = client.args[3]
-				client.ReplyString("OK")
-				client.dirty++
+				el.Value = c.args[3]
+				c.ReplyString("OK")
+				c.dirty++
 				return
 			}
 			el = el.Prev()
@@ -392,41 +392,41 @@ func lsetCommand(client *Client) {
 		el = l.Front()
 		for el != nil {
 			if i == start {
-				el.Value = client.args[3]
-				client.ReplyString("OK")
-				client.dirty++
+				el.Value = c.args[3]
+				c.ReplyString("OK")
+				c.dirty++
 				return
 			}
 			el = el.Next()
 			i++
 		}
 	}
-	client.ReplyError("index out of range")
+	c.ReplyError("index out of range")
 }
 
-func ltrimCommand(client *Client) {
-	if len(client.args) != 4 {
-		client.ReplyAritryError()
+func ltrimCommand(c *client) {
+	if len(c.args) != 4 {
+		c.ReplyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(client.args[2], 10, 64)
+	sn, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
-	en, err := strconv.ParseInt(client.args[3], 10, 64)
+	en, err := strconv.ParseInt(c.args[3], 10, 64)
 	if err != nil {
-		client.ReplyInvalidIntError()
+		c.ReplyInvalidIntError()
 		return
 	}
 
-	l, ok := client.server.db.GetList(client.args[1], false)
+	l, ok := c.db.GetList(c.args[1], false)
 	if !ok {
-		client.ReplyTypeError()
+		c.ReplyTypeError()
 		return
 	}
 	if l == nil {
-		client.ReplyString("OK")
+		c.ReplyString("OK")
 		return
 	}
 
@@ -455,7 +455,7 @@ func ltrimCommand(client *Client) {
 		}
 		next := el.Next()
 		l.Remove(el)
-		client.dirty++
+		c.dirty++
 		el = next
 		i++
 	}
@@ -468,12 +468,12 @@ func ltrimCommand(client *Client) {
 		}
 		prev := el.Prev()
 		l.Remove(el)
-		client.dirty++
+		c.dirty++
 		el = prev
 		i--
 	}
 	if l.Len() == 0 {
-		client.server.db.Del(client.args[1])
+		c.db.Del(c.args[1])
 	}
-	client.ReplyString("OK")
+	c.ReplyString("OK")
 }
