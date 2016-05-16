@@ -6,22 +6,22 @@ import (
 )
 
 type client struct {
-	wr     io.Writer // client writer
-	server *Server   // shared server
-	db     *dbT      // the active database
-	args   []string  // command arguments
-	raw    []byte    // the raw command bytes
-	dirty  int       // the number of changes made by the client
+	wr    io.Writer // client writer
+	s     *Server   // shared server
+	db    *database // the active database
+	args  []string  // command arguments
+	raw   []byte    // the raw command bytes
+	dirty int       // the number of changes made by the client
 }
 
 // flushAOF checks if the the client has any dirty markers and
 // if so calls server.flushAOF
 func (c *client) flushAOF() error {
 	if c.dirty > 0 {
-		c.server.mu.Lock()
-		defer c.server.mu.Unlock()
-		if err := c.server.flushAOF(); err != nil {
-			c.server.fatalError(err)
+		c.s.mu.Lock()
+		defer c.s.mu.Unlock()
+		if err := c.s.flushAOF(); err != nil {
+			c.s.fatalError(err)
 			return err
 		}
 		c.dirty = 0

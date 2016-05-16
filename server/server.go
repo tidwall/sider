@@ -74,7 +74,7 @@ func (s *Server) commandTable() {
 
 }
 
-type commandT struct {
+type command struct {
 	name  string
 	aof   bool
 	funct func(c *client)
@@ -94,8 +94,8 @@ type Server struct {
 	mu       sync.Mutex
 	l        net.Listener
 	options  *Options
-	commands map[string]*commandT
-	dbs      map[int]*dbT
+	cmds     map[string]*command
+	dbs      map[int]*database
 	follower bool
 
 	expires     map[string]time.Time
@@ -114,7 +114,7 @@ type Server struct {
 // two entries assigned to the same command. One with an all uppercase key and one with
 // an all lower case key.
 func (s *Server) register(commandName string, f func(c *client), opts string) {
-	var cmd commandT
+	var cmd command
 	cmd.name = commandName
 	cmd.funct = f
 	for _, c := range []byte(opts) {
@@ -123,8 +123,8 @@ func (s *Server) register(commandName string, f func(c *client), opts string) {
 			cmd.aof = true
 		}
 	}
-	s.commands[strings.ToLower(commandName)] = &cmd
-	s.commands[strings.ToUpper(commandName)] = &cmd
+	s.cmds[strings.ToLower(commandName)] = &cmd
+	s.cmds[strings.ToUpper(commandName)] = &cmd
 }
 
 // The log format is described at http://build47.com/redis-log-format-levels/
@@ -245,10 +245,10 @@ func (s *Server) stopFatalErrorWatch() {
 	s.ferrcond.L.Unlock()
 }
 
-func (s *Server) selectDB(num int) *dbT {
+func (s *Server) selectDB(num int) *database {
 	db, ok := s.dbs[num]
 	if !ok {
-		db = NewDB()
+		db = newDB()
 		s.dbs[num] = db
 	}
 	return db
@@ -266,8 +266,8 @@ func fillOptions(options *Options) *Options {
 
 func Start(addr string, options *Options) (err error) {
 	s := &Server{
-		commands: make(map[string]*commandT),
-		dbs:      make(map[int]*dbT),
+		cmds:     make(map[string]*command),
+		dbs:      make(map[int]*database),
 		expires:  make(map[string]time.Time),
 		aofdbnum: -1,
 		options:  fillOptions(options),
@@ -343,16 +343,16 @@ func autocase(command string) string {
 	return command
 }
 
-func handleConn(conn net.Conn, server *Server) {
+func handleConn(conn net.Conn, s *Server) {
 	defer conn.Close()
 	rd := NewCommandReader(conn)
 	wr := bufio.NewWriter(conn)
 	defer wr.Flush()
-	c := &client{wr: wr, server: server}
+	c := &client{wr: wr, s: s}
 	defer c.flushAOF()
-	server.mu.Lock()
-	c.db = server.selectDB(0)
-	server.mu.Unlock()
+	s.mu.Lock()
+	c.db = s.selectDB(0)
+	s.mu.Unlock()
 	var flush bool
 	var err error
 	for {
@@ -366,16 +366,16 @@ func handleConn(conn net.Conn, server *Server) {
 		if len(c.args) == 0 {
 			continue
 		}
-		command := autocase(c.args[0])
-		if cmd, ok := server.commands[command]; ok {
-			server.mu.Lock()
+		commandName := autocase(c.args[0])
+		if cmd, ok := s.cmds[commandName]; ok {
+			s.mu.Lock()
 			cmd.funct(c)
 			if c.dirty > 0 && cmd.aof {
 				c.db.aofbuf.Write(c.raw)
 			}
-			server.mu.Unlock()
+			s.mu.Unlock()
 		} else {
-			switch command {
+			switch commandName {
 			default:
 				c.ReplyError("unknown command '" + c.args[0] + "'")
 			case "quit":

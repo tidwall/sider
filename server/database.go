@@ -6,54 +6,54 @@ import (
 	"time"
 )
 
-type dbItemT struct {
-	Expires bool
-	Value   interface{}
+type dbItem struct {
+	expires bool
+	value   interface{}
 }
 
-type dbT struct {
-	items   map[string]dbItemT
+type database struct {
+	items   map[string]dbItem
 	expires map[string]time.Time
 	aofbuf  bytes.Buffer
 }
 
-func NewDB() *dbT {
-	return &dbT{
-		items:   make(map[string]dbItemT),
+func newDB() *database {
+	return &database{
+		items:   make(map[string]dbItem),
 		expires: make(map[string]time.Time),
 	}
 }
 
-func (db *dbT) Len() int {
+func (db *database) Len() int {
 	return len(db.items)
 }
 
-func (db *dbT) Flush() {
-	db.items = make(map[string]dbItemT)
+func (db *database) Flush() {
+	db.items = make(map[string]dbItem)
 	db.expires = make(map[string]time.Time)
 }
 
-func (db *dbT) Set(key string, value interface{}) {
+func (db *database) Set(key string, value interface{}) {
 	delete(db.expires, key)
-	db.items[key] = dbItemT{Value: value}
+	db.items[key] = dbItem{value: value}
 }
 
-func (db *dbT) Get(key string) (interface{}, bool) {
+func (db *database) Get(key string) (interface{}, bool) {
 	item, ok := db.items[key]
 	if !ok {
 		return nil, false
 	}
-	if item.Expires {
+	if item.expires {
 		if t, ok := db.expires[key]; ok {
 			if time.Now().After(t) {
 				return nil, false
 			}
 		}
 	}
-	return item.Value, true
+	return item.value, true
 }
 
-func (db *dbT) GetType(key string) string {
+func (db *database) GetType(key string) string {
 	v, ok := db.Get(key)
 	if !ok {
 		return "none"
@@ -73,13 +73,13 @@ func (db *dbT) GetType(key string) string {
 	}
 }
 
-func (db *dbT) Del(key string) (interface{}, bool) {
+func (db *database) Del(key string) (interface{}, bool) {
 	item, ok := db.items[key]
 	if !ok {
 		return nil, false
 	}
 	delete(db.items, key)
-	if item.Expires {
+	if item.expires {
 		delete(db.expires, key)
 		if t, ok := db.expires[key]; ok {
 			if time.Now().After(t) {
@@ -87,27 +87,27 @@ func (db *dbT) Del(key string) (interface{}, bool) {
 			}
 		}
 	}
-	return item.Value, true
+	return item.value, true
 }
 
-func (db *dbT) Expire(key string, when time.Time) bool {
+func (db *database) Expire(key string, when time.Time) bool {
 	item, ok := db.items[key]
 	if !ok {
 		return false
 	}
-	item.Expires = true
+	item.expires = true
 	db.items[key] = item
 	db.expires[key] = when
 	return true
 }
 
-func (db *dbT) GetExpires(key string) (interface{}, time.Time, bool) {
+func (db *database) GetExpires(key string) (interface{}, time.Time, bool) {
 	item, ok := db.items[key]
 	if !ok {
 		return nil, time.Time{}, false
 	}
 	var expires time.Time
-	if item.Expires {
+	if item.expires {
 		if t, ok := db.expires[key]; ok {
 			expires = t
 			if time.Now().After(t) {
@@ -115,10 +115,10 @@ func (db *dbT) GetExpires(key string) (interface{}, time.Time, bool) {
 			}
 		}
 	}
-	return item.Value, expires, true
+	return item.value, expires, true
 }
 
-func (db *dbT) GetList(key string, create bool) (*list.List, bool) {
+func (db *database) GetList(key string, create bool) (*list.List, bool) {
 	value, ok := db.Get(key)
 	if ok {
 		switch v := value.(type) {
@@ -136,7 +136,7 @@ func (db *dbT) GetList(key string, create bool) (*list.List, bool) {
 	return nil, true
 }
 
-func (db *dbT) GetSet(key string, create bool) (*setT, bool) {
+func (db *database) GetSet(key string, create bool) (*setT, bool) {
 	value, ok := db.Get(key)
 	if ok {
 		switch v := value.(type) {
@@ -154,33 +154,33 @@ func (db *dbT) GetSet(key string, create bool) (*setT, bool) {
 	return nil, true
 }
 
-func (db *dbT) Ascend(iterator func(key string, value interface{}) bool) {
+func (db *database) Ascend(iterator func(key string, value interface{}) bool) {
 	now := time.Now()
 	for key, item := range db.items {
-		if item.Expires {
+		if item.expires {
 			if t, ok := db.expires[key]; ok {
 				if now.After(t) {
 					continue
 				}
 			}
 		}
-		if !iterator(key, item.Value) {
+		if !iterator(key, item.value) {
 			return
 		}
 	}
 }
 
-func (db *dbT) Update(key string, value interface{}) {
+func (db *database) Update(key string, value interface{}) {
 	item, ok := db.items[key]
 	if ok {
-		item.Value = value
+		item.value = value
 	} else {
-		item = dbItemT{Value: value}
+		item = dbItem{value: value}
 	}
 	db.items[key] = item
 }
 
-func (db *dbT) DeleteExpires() (deletedKeys []string) {
+func (db *database) DeleteExpires() (deletedKeys []string) {
 	now := time.Now()
 	for key, t := range db.expires {
 		if now.Before(t) {

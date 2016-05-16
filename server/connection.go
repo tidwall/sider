@@ -31,6 +31,6 @@ func selectCommand(c *client) {
 		c.ReplyError("invalid DB index")
 		return
 	}
-	c.db = c.server.selectDB(int(num))
+	c.db = c.s.selectDB(int(num))
 	c.ReplyString("OK")
 }
