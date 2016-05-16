@@ -10,7 +10,7 @@ func getCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if !ok {
 		client.ReplyNull()
 		return
@@ -30,7 +30,7 @@ func getsetCommand(client *Client) {
 		return
 	}
 	var res string
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if ok {
 		switch s := key.(type) {
 		default:
@@ -40,7 +40,7 @@ func getsetCommand(client *Client) {
 			res = s
 		}
 	}
-	client.server.SetKey(client.args[1], client.args[2])
+	client.server.db.Set(client.args[1], client.args[2])
 	if !ok {
 		client.ReplyNull()
 	} else {
@@ -93,9 +93,9 @@ func decrbyCommand(client *Client) {
 
 func genericIncrbyCommand(client *Client, delta int) {
 	var n int
-	key, ok := client.server.GetKey(client.args[1])
+	value, ok := client.server.db.Get(client.args[1])
 	if ok {
-		switch s := key.(type) {
+		switch s := value.(type) {
 		default:
 			client.ReplyTypeError()
 			return
@@ -111,7 +111,7 @@ func genericIncrbyCommand(client *Client, delta int) {
 	} else {
 		n = 1
 	}
-	client.server.UpdateKey(client.args[1], itoa(n))
+	client.server.db.Update(client.args[1], itoa(n))
 	client.ReplyInt(int(n))
 	client.dirty++
 }
@@ -170,15 +170,15 @@ func setCommand(client *Client) {
 		}
 	}
 	if nx || xx {
-		_, ok := client.server.GetKey(client.args[1])
+		_, ok := client.server.db.Get(client.args[1])
 		if (ok && nx) || (!ok && xx) {
 			client.ReplyNull()
 			return
 		}
 	}
-	client.server.SetKey(client.args[1], client.args[2])
+	client.server.db.Set(client.args[1], client.args[2])
 	if expires {
-		client.server.Expire(client.args[1], when)
+		client.server.db.Expire(client.args[1], when)
 	}
 	client.ReplyString("OK")
 	client.dirty++
@@ -189,12 +189,12 @@ func setnxCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	_, ok := client.server.GetKey(client.args[1])
+	_, ok := client.server.db.Get(client.args[1])
 	if ok {
 		client.ReplyInt(0)
 		return
 	}
-	client.server.SetKey(client.args[1], client.args[2])
+	client.server.db.Set(client.args[1], client.args[2])
 	client.ReplyInt(1)
 	client.dirty++
 }
@@ -205,7 +205,7 @@ func msetCommand(client *Client) {
 		return
 	}
 	for i := 1; i < len(client.args); i += 2 {
-		client.server.SetKey(client.args[i+0], client.args[i+1])
+		client.server.db.Set(client.args[i+0], client.args[i+1])
 		client.dirty++
 	}
 	client.ReplyString("OK")
@@ -217,14 +217,14 @@ func msetnxCommand(client *Client) {
 		return
 	}
 	for i := 1; i < len(client.args); i += 2 {
-		_, ok := client.server.GetKey(client.args[1])
+		_, ok := client.server.db.Get(client.args[1])
 		if ok {
 			client.ReplyInt(0)
 			return
 		}
 	}
 	for i := 1; i < len(client.args); i += 2 {
-		client.server.SetKey(client.args[i+0], client.args[i+1])
+		client.server.db.Set(client.args[i+0], client.args[i+1])
 		client.dirty++
 	}
 	client.ReplyInt(1)
@@ -235,9 +235,9 @@ func appendCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if !ok {
-		client.server.SetKey(client.args[1], client.args[2])
+		client.server.db.Set(client.args[1], client.args[2])
 		client.ReplyInt(len(client.args[2]))
 		client.dirty++
 		return
@@ -248,7 +248,7 @@ func appendCommand(client *Client) {
 		return
 	case string:
 		s += client.args[2]
-		client.server.SetKey(client.args[1], s)
+		client.server.db.Set(client.args[1], s)
 		client.ReplyInt(len(s))
 		client.dirty++
 	}
@@ -271,7 +271,7 @@ func bitcountCommand(client *Client) {
 		}
 		start, end = int(n1), int(n2)
 	}
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if !ok {
 		client.ReplyInt(0)
 		return
@@ -315,7 +315,7 @@ func mgetCommand(client *Client) {
 	}
 	client.ReplyMultiBulkLen(len(client.args) - 1)
 	for i := 1; i < len(client.args); i++ {
-		key, ok := client.server.GetKey(client.args[i])
+		key, ok := client.server.db.Get(client.args[i])
 		if !ok {
 			client.ReplyNull()
 		} else if s, ok := key.(string); ok {

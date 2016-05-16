@@ -134,7 +134,7 @@ func saddCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.GetKeySet(client.args[1], true)
+	st, ok := client.server.db.GetSet(client.args[1], true)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -155,7 +155,7 @@ func scardCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.GetKeySet(client.args[1], false)
+	st, ok := client.server.db.GetSet(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -171,7 +171,7 @@ func smembersCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.GetKeySet(client.args[1], false)
+	st, ok := client.server.db.GetSet(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -191,7 +191,7 @@ func sismembersCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.GetKeySet(client.args[1], false)
+	st, ok := client.server.db.GetSet(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -218,7 +218,7 @@ func sdiffinterunionGenericCommand(client *Client, diff, union bool, store bool)
 	}
 	var st *Set
 	for i := basei; i < len(client.args); i++ {
-		stt, ok := client.server.GetKeySet(client.args[i], false)
+		stt, ok := client.server.db.GetSet(client.args[i], false)
 		if !ok {
 			client.ReplyTypeError()
 			return
@@ -245,13 +245,13 @@ func sdiffinterunionGenericCommand(client *Client, diff, union bool, store bool)
 	}
 	if store {
 		if st == nil || st.Len() == 0 {
-			_, ok := client.server.DelKey(client.args[1])
+			_, ok := client.server.db.Del(client.args[1])
 			if ok {
 				client.dirty++
 			}
 			client.ReplyInt(0)
 		} else {
-			client.server.SetKey(client.args[1], st)
+			client.server.db.Set(client.args[1], st)
 			client.dirty++
 			client.ReplyInt(st.Len())
 		}
@@ -306,7 +306,7 @@ func srandmemberpopGenericCommand(client *Client, pop bool) {
 		count = int(n)
 		countSpecified = true
 	}
-	st, ok := client.server.GetKeySet(client.args[1], false)
+	st, ok := client.server.db.GetSet(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -338,7 +338,7 @@ func srandmemberpopGenericCommand(client *Client, pop bool) {
 		}
 	}
 	if pop && st.Len() == 0 {
-		client.server.DelKey(client.args[1])
+		client.server.db.Del(client.args[1])
 	}
 }
 
@@ -355,7 +355,7 @@ func sremCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	st, ok := client.server.GetKeySet(client.args[1], false)
+	st, ok := client.server.db.GetSet(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -372,7 +372,7 @@ func sremCommand(client *Client) {
 		}
 	}
 	if st.Len() == 0 {
-		client.server.DelKey(client.args[1])
+		client.server.db.Del(client.args[1])
 	}
 	client.ReplyInt(count)
 }
@@ -382,12 +382,12 @@ func smoveCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	src, ok := client.server.GetKeySet(client.args[1], false)
+	src, ok := client.server.db.GetSet(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
 	}
-	dst, ok := client.server.GetKeySet(client.args[2], false)
+	dst, ok := client.server.db.GetSet(client.args[2], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -403,7 +403,7 @@ func smoveCommand(client *Client) {
 	if dst == nil {
 		dst = NewSet()
 		dst.Add(client.args[3])
-		client.server.SetKey(client.args[2], dst)
+		client.server.db.Set(client.args[2], dst)
 		client.ReplyInt(1)
 		client.dirty++
 		return

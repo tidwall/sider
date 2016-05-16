@@ -12,7 +12,7 @@ func delCommand(client *Client) {
 	}
 	count := 0
 	for i := 1; i < len(client.args); i++ {
-		if _, ok := client.server.DelKey(client.args[i]); ok {
+		if _, ok := client.server.db.Del(client.args[i]); ok {
 			count++
 			client.dirty++
 		}
@@ -26,13 +26,13 @@ func renameCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if !ok {
 		client.ReplyError("no such key")
 		return
 	}
-	client.server.DelKey(client.args[1])
-	client.server.SetKey(client.args[2], key)
+	client.server.db.Del(client.args[1])
+	client.server.db.Set(client.args[2], key)
 	client.ReplyString("OK")
 	client.dirty++
 }
@@ -42,18 +42,18 @@ func renamenxCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if !ok {
 		client.ReplyError("no such key")
 		return
 	}
-	_, ok = client.server.GetKey(client.args[2])
+	_, ok = client.server.db.Get(client.args[2])
 	if ok {
 		client.ReplyInt(0)
 		return
 	}
-	client.server.DelKey(client.args[1])
-	client.server.SetKey(client.args[2], key)
+	client.server.db.Del(client.args[1])
+	client.server.db.Set(client.args[2], key)
 	client.ReplyInt(1)
 	client.dirty++
 }
@@ -63,10 +63,11 @@ func keysCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	client.ReplyMultiBulkLen(len(client.server.keys))
-	for name := range client.server.keys {
-		client.ReplyBulk(name)
-	}
+	client.ReplyMultiBulkLen(client.server.db.Len())
+	client.server.db.Ascend(func(key string, value interface{}) bool {
+		client.ReplyBulk(key)
+		return true
+	})
 
 	// var keys []string
 	// pattern := parsePattern(client.args[1])
@@ -117,7 +118,7 @@ func typeCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if !ok {
 		client.ReplyString("none")
 		return
@@ -135,10 +136,15 @@ func randomkeyCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	for name := range client.server.keys {
-		client.ReplyBulk(name)
+	got := false
+	client.server.db.Ascend(func(key string, value interface{}) bool {
+		client.ReplyBulk(key)
+		got = true
+		return false
+	})
+	if !got {
+		client.ReplyNull()
 	}
-	client.ReplyNull()
 }
 
 func existsCommand(client *Client) {
@@ -148,7 +154,7 @@ func existsCommand(client *Client) {
 	}
 	var count int
 	for i := 1; i < len(client.args); i++ {
-		if _, ok := client.server.GetKey(client.args[i]); ok {
+		if _, ok := client.server.db.Get(client.args[i]); ok {
 			count++
 		}
 	}
@@ -164,7 +170,7 @@ func expireCommand(client *Client) {
 		client.ReplyError("value is not an integer or out of range")
 		return
 	}
-	if client.server.Expire(client.args[1], time.Now().Add(time.Duration(seconds)*time.Second)) {
+	if client.server.db.Expire(client.args[1], time.Now().Add(time.Duration(seconds)*time.Second)) {
 		client.ReplyInt(1)
 		client.dirty++
 	} else {
@@ -176,7 +182,7 @@ func ttlCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	_, expires, ok := client.server.GetKeyExpires(client.args[1])
+	_, expires, ok := client.server.db.GetExpires(client.args[1])
 	if !ok {
 		client.ReplyInt(-2)
 	} else if expires.IsZero() {

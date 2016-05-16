@@ -12,7 +12,7 @@ func lpushCommand(client *Client) {
 	}
 
 	var l *list.List
-	key, ok := client.server.GetKey(client.args[1])
+	key, ok := client.server.db.Get(client.args[1])
 	if ok {
 		switch v := key.(type) {
 		default:
@@ -23,7 +23,7 @@ func lpushCommand(client *Client) {
 		}
 	} else {
 		l = list.New()
-		client.server.SetKey(client.args[1], l)
+		client.server.db.Set(client.args[1], l)
 	}
 	for i := 2; i < len(client.args); i++ {
 		l.PushFront(client.args[i])
@@ -37,7 +37,7 @@ func rpushCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.GetKeyList(client.args[1], true)
+	l, ok := client.server.db.GetList(client.args[1], true)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -65,7 +65,7 @@ func lrangeCommand(client *Client) {
 		return
 	}
 
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -146,7 +146,7 @@ func llenCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -163,7 +163,7 @@ func lpopCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -174,7 +174,7 @@ func lpopCommand(client *Client) {
 		el := l.Front()
 		l.Remove(el)
 		if l.Len() == 0 {
-			client.server.DelKey(client.args[1])
+			client.server.db.Del(client.args[1])
 		}
 		client.ReplyBulk(el.Value.(string))
 		client.dirty++
@@ -188,7 +188,7 @@ func rpopCommand(client *Client) {
 		client.ReplyAritryError()
 		return
 	}
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -199,7 +199,7 @@ func rpopCommand(client *Client) {
 		el := l.Back()
 		l.Remove(el)
 		if l.Len() == 0 {
-			client.server.DelKey(client.args[1])
+			client.server.db.Del(client.args[1])
 		}
 		client.ReplyBulk(el.Value.(string))
 		client.dirty++
@@ -219,7 +219,7 @@ func lindexCommand(client *Client) {
 		return
 	}
 
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -281,7 +281,7 @@ func lremCommand(client *Client) {
 		client.ReplyInvalidIntError()
 		return
 	}
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -348,7 +348,7 @@ func lsetCommand(client *Client) {
 		client.ReplyInvalidIntError()
 		return
 	}
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -420,7 +420,7 @@ func ltrimCommand(client *Client) {
 		return
 	}
 
-	l, ok := client.server.GetKeyList(client.args[1], false)
+	l, ok := client.server.db.GetList(client.args[1], false)
 	if !ok {
 		client.ReplyTypeError()
 		return
@@ -473,7 +473,7 @@ func ltrimCommand(client *Client) {
 		i--
 	}
 	if l.Len() == 0 {
-		client.server.DelKey(client.args[1])
+		client.server.db.Del(client.args[1])
 	}
 	client.ReplyString("OK")
 }
