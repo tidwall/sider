@@ -65,7 +65,7 @@ func keysCommand(c *client) {
 	var keys []string
 	pattern := parsePattern(c.args[1])
 	c.db.ascend(func(key string, value interface{}) bool {
-		if pattern.Match(key) {
+		if pattern.match(key) {
 			keys = append(keys, key)
 		}
 		return true

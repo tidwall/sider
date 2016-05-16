@@ -23,7 +23,7 @@ type commandReader struct {
 	args   []string
 }
 
-func NewCommandReader(rd io.Reader) *commandReader {
+func newCommandReader(rd io.Reader) *commandReader {
 	return &commandReader{
 		rd:   rd,
 		rbuf: make([]byte, 64*1024),
@@ -44,7 +44,7 @@ func autoConvertArgsToMultiBulk(raw []byte, args []string, telnet, flush bool) (
 	return raw, args, flush, nil
 }
 
-func (rd *commandReader) ReadCommand() (raw []byte, args []string, flush bool, err error) {
+func (rd *commandReader) readCommand() (raw []byte, args []string, flush bool, err error) {
 	if len(rd.buf) > 0 {
 		// there is already data in the buffer, do we have enough to make a full command?
 		raw, args, telnet, err := rd.readBufferedCommand(rd.buf)
@@ -85,7 +85,7 @@ func (rd *commandReader) ReadCommand() (raw []byte, args []string, flush bool, e
 		rd.buf = append(rd.buf, rd.rbuf[:n]...)
 		rd.copied = true
 	}
-	return rd.ReadCommand()
+	return rd.readCommand()
 }
 
 func (rd *commandReader) readBufferedCommand(data []byte) ([]byte, []string, bool, error) {

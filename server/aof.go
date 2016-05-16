@@ -73,7 +73,7 @@ func (s *Server) loadAOF() error {
 	c := &client{wr: ioutil.Discard, s: s}
 	var read int
 	for {
-		raw, args, _, err := rd.ReadCommand()
+		raw, args, _, err := rd.readCommand()
 		if err != nil {
 			if err == io.EOF {
 				break

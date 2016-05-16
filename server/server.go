@@ -345,7 +345,7 @@ func autocase(command string) string {
 
 func handleConn(conn net.Conn, s *Server) {
 	defer conn.Close()
-	rd := NewCommandReader(conn)
+	rd := newCommandReader(conn)
 	wr := bufio.NewWriter(conn)
 	defer wr.Flush()
 	c := &client{wr: wr, s: s}
@@ -356,7 +356,7 @@ func handleConn(conn net.Conn, s *Server) {
 	var flush bool
 	var err error
 	for {
-		c.raw, c.args, flush, err = rd.ReadCommand()
+		c.raw, c.args, flush, err = rd.readCommand()
 		if err != nil {
 			if err, ok := err.(*protocolError); ok {
 				c.replyError(err.Error())

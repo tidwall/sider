@@ -2,48 +2,48 @@ package server
 
 import "path"
 
-type Pattern struct {
-	Value          string
-	All            bool
-	Glob           bool
-	GreaterOrEqual string
-	LessThan       string
+type pattern struct {
+	value          string
+	all            bool
+	glob           bool
+	greaterOrEqual string
+	lessThan       string
 }
 
-func parsePattern(pattern string) *Pattern {
-	if pattern == "*" {
-		return &Pattern{Value: "*", All: true, Glob: true}
+func parsePattern(value string) *pattern {
+	if value == "*" {
+		return &pattern{value: "*", all: true, glob: true}
 	}
-	if pattern == "" {
-		return &Pattern{Value: ""}
+	if value == "" {
+		return &pattern{value: ""}
 	}
-	p := &Pattern{
-		Value: pattern,
+	p := &pattern{
+		value: value,
 	}
-	for i, c := range pattern {
+	for i, c := range value {
 		if c == '[' || c == '*' || c == '?' {
-			p.GreaterOrEqual = pattern[:i]
-			p.Glob = true
+			p.greaterOrEqual = value[:i]
+			p.glob = true
 			break
 		}
 	}
-	if !p.Glob {
-		p.GreaterOrEqual = pattern
-	} else if p.GreaterOrEqual != "" {
-		c := p.GreaterOrEqual[len(p.GreaterOrEqual)-1]
+	if !p.glob {
+		p.greaterOrEqual = value
+	} else if p.greaterOrEqual != "" {
+		c := p.greaterOrEqual[len(p.greaterOrEqual)-1]
 		if c == 0xFF {
-			p.LessThan = p.GreaterOrEqual + string(0)
+			p.lessThan = p.greaterOrEqual + string(0)
 		} else {
-			p.LessThan = p.GreaterOrEqual[:len(p.GreaterOrEqual)-1] + string(c+1)
+			p.lessThan = p.greaterOrEqual[:len(p.greaterOrEqual)-1] + string(c+1)
 		}
 	}
 	return p
 }
 
-func (p *Pattern) Match(s string) bool {
-	if p.All {
+func (p *pattern) match(s string) bool {
+	if p.all {
 		return true
 	}
-	matched, _ := path.Match(p.Value, s)
+	matched, _ := path.Match(p.value, s)
 	return matched
 }
