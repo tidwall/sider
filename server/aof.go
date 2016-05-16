@@ -69,7 +69,7 @@ func (s *Server) closeAOF() {
 
 func (s *Server) loadAOF() error {
 	start := time.Now()
-	rd := &commandReaderT{rd: s.aof, rbuf: make([]byte, 64*1024)}
+	rd := &commandReader{rd: s.aof, rbuf: make([]byte, 64*1024)}
 	c := &client{wr: ioutil.Discard, s: s}
 	var read int
 	for {
