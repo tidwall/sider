@@ -291,6 +291,7 @@ func sortCommand(c *client) {
 	byPrefix := ""
 	bySuffix := ""
 	byProvided := false
+	noSort := false
 	gets := []string(nil)
 	for i := 2; i < len(c.args); i++ {
 		switch strings.ToLower(c.args[i]) {
@@ -316,6 +317,8 @@ func sortCommand(c *client) {
 				byPrefix = by[:idx]
 				bySuffix = by[idx+1:]
 				byProvided = true
+			} else {
+				noSort = true
 			}
 		case "alpha":
 			alpha = true
@@ -386,19 +389,21 @@ func sortCommand(c *client) {
 			count = len(arr) - offset
 		}
 	}
-	values := &sortValues{
-		db:         c.db,
-		asc:        asc,
-		alpha:      alpha,
-		arr:        arr,
-		byPrefix:   byPrefix,
-		bySuffix:   bySuffix,
-		byProvided: byProvided,
-	}
-	sort.Sort(values)
-	if values.invalid {
-		c.replyError("One or more scores can't be converted into double")
-		return
+	if !noSort {
+		values := &sortValues{
+			db:         c.db,
+			asc:        asc,
+			alpha:      alpha,
+			arr:        arr,
+			byPrefix:   byPrefix,
+			bySuffix:   bySuffix,
+			byProvided: byProvided,
+		}
+		sort.Sort(values)
+		if values.invalid {
+			c.replyError("One or more scores can't be converted into double")
+			return
+		}
 	}
 	if limitProvided {
 		arr = arr[offset : offset+count]
