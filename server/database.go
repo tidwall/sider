@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"container/list"
 	"time"
 )
 
@@ -66,7 +65,7 @@ func (db *database) getType(key string) string {
 		return "string"
 	case string:
 		return "string"
-	case *list.List:
+	case *list:
 		return "list"
 	case *set:
 		return "set"
@@ -118,18 +117,18 @@ func (db *database) getExpires(key string) (interface{}, time.Time, bool) {
 	return item.value, expires, true
 }
 
-func (db *database) getList(key string, create bool) (*list.List, bool) {
+func (db *database) getList(key string, create bool) (*list, bool) {
 	value, ok := db.get(key)
 	if ok {
 		switch v := value.(type) {
 		default:
 			return nil, false
-		case *list.List:
+		case *list:
 			return v, true
 		}
 	}
 	if create {
-		l := list.New()
+		l := newList()
 		db.set(key, l)
 		return l, true
 	}

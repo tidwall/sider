@@ -1,34 +1,359 @@
 package server
 
 import (
-	"container/list"
+	"fmt"
 	"strconv"
+	"strings"
 )
 
+type listItem struct {
+	value string
+	prev  *listItem
+	next  *listItem
+}
+type list struct {
+	count int
+	front *listItem
+	back  *listItem
+}
+
+func newList() *list {
+	return &list{}
+}
+
+// ridx resolves an index, the input could be a negative number.
+// The output is always a valid index.
+// The return bool is false when the index could not be resolved.
+// An input of -1 is equal to l.len()-1
+// When the 'outside' param is true, an index outside the range is accepted.
+// Returns the resolved index and a bool indicating that the resolved index is within range.
+func (l *list) ridx(idx int, outside bool) (resolvedRange, resolvedAny int, ok bool) {
+	var oidx int
+	if l.count == 0 {
+		return 0, 0, false
+	}
+	if idx < 0 {
+		idx = l.count + idx
+		oidx = idx
+		if idx < 0 {
+			if !outside {
+				return 0, 0, false
+			} else {
+				idx = 0
+			}
+		}
+	} else if idx >= l.count {
+		oidx = idx
+		if !outside {
+			return 0, 0, false
+		} else {
+			idx = l.count - 1
+		}
+	} else {
+		oidx = idx
+	}
+	return idx, oidx, true
+}
+
+func (l *list) lindex(idx int) (value string, ok bool) {
+	if idx, _, ok = l.ridx(idx, false); !ok {
+		return "", false
+	}
+	if idx < l.count/2 {
+		i := 0
+		el := l.front
+		for el != nil {
+			if i == idx {
+				return el.value, true
+			}
+			el = el.next
+			i++
+		}
+	} else {
+		i := l.count - 1
+		el := l.back
+		for el != nil {
+			if i == idx {
+				return el.value, true
+			}
+			el = el.prev
+			i--
+		}
+	}
+	return "", false
+}
+
+func (l *list) len() int {
+	return l.count
+}
+
+func (l *list) lpop() (value string, ok bool) {
+	if l.count == 0 {
+		return "", false
+	}
+	el := l.front
+	l.front = el.next
+	if l.front == nil {
+		l.back = nil
+	} else {
+		l.front.prev = nil
+	}
+	l.count--
+	return el.value, true
+}
+
+func (l *list) rpop() (value string, ok bool) {
+	if l.count == 0 {
+		return "", false
+	}
+	el := l.back
+	l.back = el.prev
+	if l.back == nil {
+		l.front = nil
+	} else {
+		l.back.next = nil
+	}
+	l.count--
+	return el.value, true
+}
+
+func (l *list) lpush(values ...string) int {
+	for _, value := range values {
+		el := &listItem{value: value}
+		if l.front == nil {
+			l.back = el
+			l.front = el
+		} else {
+			l.front.prev = el
+			el.next = l.front
+			l.front = el
+		}
+	}
+	l.count += len(values)
+	return l.count
+}
+
+func (l *list) rpush(values ...string) int {
+	for _, value := range values {
+		el := &listItem{value: value}
+		if l.back == nil {
+			l.back = el
+			l.front = el
+		} else {
+			l.back.next = el
+			el.prev = l.back
+			l.back = el
+		}
+	}
+	l.count += len(values)
+	return l.count
+}
+
+func (l *list) set(idx int, value string) bool {
+	var ok bool
+	if idx, _, ok = l.ridx(idx, false); !ok {
+		return false
+	}
+	if idx < l.count/2 {
+		i := 0
+		el := l.front
+		for el != nil {
+			if i == idx {
+				el.value = value
+				return true
+			}
+			el = el.next
+			i++
+		}
+	} else {
+		i := l.count - 1
+		el := l.back
+		for el != nil {
+			if i == idx {
+				el.value = value
+				return true
+			}
+			el = el.prev
+			i--
+		}
+	}
+	return false
+}
+
+func (l *list) rem(count int, value string) int {
+	if count < 0 {
+		return 0
+	}
+	n := 0
+	el := l.front
+	for el != nil {
+		if n == count {
+			break
+		}
+		nel := el.next
+		if el.value == value {
+			if el.prev == nil {
+				if el.next == nil {
+					l.front, l.back = nil, nil
+				} else {
+					el.next.prev = nil
+					l.front = el.next
+				}
+			} else if el.next == nil {
+				el.prev.next = nil
+				l.back = el.prev
+			} else {
+				el.prev.next = el.next
+				el.next.prev = el.prev
+			}
+			l.count--
+			n++
+		}
+		el = nel
+	}
+	return n
+}
+
+func (l *list) lrange(start, stop int, count func(n int), iterator func(value string) bool) {
+	var ok bool
+	if start, _, ok = l.ridx(start, true); !ok {
+		count(0)
+		return
+	}
+	if stop, _, ok = l.ridx(stop, true); !ok {
+		count(0)
+		return
+	}
+	if start > stop {
+		count(0)
+		return
+	}
+	n := stop - start + 1
+	count(n)
+	var el *listItem
+	if start < l.count/2 {
+		i := 0
+		el = l.front
+		for el != nil {
+			if i == start {
+				break
+			}
+			el = el.next
+			i++
+		}
+	} else {
+		i := l.count - 1
+		el = l.back
+		for el != nil {
+			if i == start {
+				break
+			}
+			el = el.prev
+			i--
+		}
+	}
+	i := 0
+	for el != nil {
+		if i == n {
+			break
+		}
+		if !iterator(el.value) {
+			return
+		}
+		el = el.next
+		i++
+	}
+}
+
+func (l *list) clear() {
+	l.front = nil
+	l.back = nil
+	l.count = 0
+}
+
+func (l *list) findel(idx int) *listItem {
+	if idx < l.count/2 {
+		i := 0
+		el := l.front
+		for el != nil {
+			if i == idx {
+				return el
+			}
+			el = el.next
+			i++
+		}
+	} else {
+		i := l.count - 1
+		el := l.back
+		for el != nil {
+			if i == idx {
+				return el
+			}
+			el = el.prev
+			i--
+		}
+	}
+	return nil
+}
+
+func (l *list) trim(start, stop int) {
+	var ok bool
+	var ostart, ostop int
+	if start, ostart, ok = l.ridx(start, true); !ok {
+		l.clear()
+		return
+	}
+	if stop, ostop, ok = l.ridx(stop, true); !ok {
+		l.clear()
+		return
+	}
+
+	if ostart > ostop ||
+		((ostart < 0 || ostart >= l.count) && (ostop < 0 || ostop >= l.count)) {
+		l.clear()
+		return
+	}
+	n := stop - start + 1
+	if n == l.count {
+		// nothing to trim
+		return
+	}
+
+	// find the start element
+	startEl := l.findel(start)
+	stopEl := l.findel(stop)
+
+	l.front = startEl
+	l.front.prev = nil
+	l.back = stopEl
+	l.back.next = nil
+
+	l.count = n
+}
+
+func (l *list) String() string {
+	s := ""
+	el := l.front
+	for el != nil {
+		s += fmt.Sprintf("%v ", el.value)
+		el = el.next
+	}
+	return strings.TrimSpace(s)
+}
+
+/* commands */
 func lpushCommand(c *client) {
 	if len(c.args) < 3 {
 		c.replyAritryError()
 		return
 	}
-
-	var l *list.List
-	key, ok := c.db.get(c.args[1])
-	if ok {
-		switch v := key.(type) {
-		default:
-			c.replyTypeError()
-			return
-		case *list.List:
-			l = v
-		}
-	} else {
-		l = list.New()
-		c.db.set(c.args[1], l)
+	l, ok := c.db.getList(c.args[1], true)
+	if !ok {
+		c.replyTypeError()
+		return
 	}
-	for i := 2; i < len(c.args); i++ {
-		l.PushFront(c.args[i])
-	}
-	c.replyInt(l.Len())
+	l.lpush(c.args[2:]...)
+	c.replyInt(l.len())
 	c.dirty++
 }
 
@@ -42,10 +367,8 @@ func rpushCommand(c *client) {
 		c.replyTypeError()
 		return
 	}
-	for i := 2; i < len(c.args); i++ {
-		l.PushBack(c.args[i])
-	}
-	c.replyInt(l.Len())
+	l.rpush(c.args[2:]...)
+	c.replyInt(l.len())
 	c.dirty++
 }
 
@@ -54,12 +377,12 @@ func lrangeCommand(c *client) {
 		c.replyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(c.args[2], 10, 64)
+	start, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
 	}
-	en, err := strconv.ParseInt(c.args[3], 10, 64)
+	stop, err := strconv.ParseInt(c.args[3], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
@@ -74,71 +397,12 @@ func lrangeCommand(c *client) {
 		c.replyMultiBulkLen(0)
 		return
 	}
-
-	llen := l.Len()
-
-	var start, stop int
-	if sn < 0 {
-		start = llen + int(sn)
-		if start < 0 {
-			start = 0
-		}
-	} else {
-		start = int(sn)
-	}
-	if en < 0 {
-		stop = llen + int(en)
-		if stop < 0 {
-			c.replyMultiBulkLen(0)
-			return
-		}
-	} else {
-		stop = int(en)
-	}
-	if start > stop || start >= llen || llen == 0 {
-		c.replyMultiBulkLen(0)
-		return
-	}
-
-	var i int
-	var el *list.Element
-	if start > llen/2 {
-		// read from back
-		i = llen - 1
-		el = l.Back()
-		for el != nil {
-			if i == start {
-				break
-			}
-			el = el.Prev()
-			i--
-		}
-	} else {
-		// read from front
-		i = 0
-		el = l.Front()
-		for el != nil {
-			if i == start {
-				break
-			}
-			el = el.Next()
-			i++
-		}
-	}
-	var res []string
-	for el != nil {
-		if i > stop {
-			break
-		}
-		res = append(res, el.Value.(string))
-		el = el.Next()
-		i++
-	}
-
-	c.replyMultiBulkLen(len(res))
-	for _, s := range res {
-		c.replyBulk(s)
-	}
+	l.lrange(int(start), int(stop), func(n int) {
+		c.replyMultiBulkLen(n)
+	}, func(value string) bool {
+		c.replyBulk(value)
+		return true
+	})
 }
 
 func llenCommand(c *client) {
@@ -155,7 +419,7 @@ func llenCommand(c *client) {
 		c.replyInt(0)
 		return
 	}
-	c.replyInt(l.Len())
+	c.replyInt(l.len())
 }
 
 func lpopCommand(c *client) {
@@ -170,17 +434,16 @@ func lpopCommand(c *client) {
 	}
 	if l == nil {
 		c.replyNull()
-	} else if l.Len() > 0 {
-		el := l.Front()
-		l.Remove(el)
-		if l.Len() == 0 {
-			c.db.del(c.args[1])
-		}
-		c.replyBulk(el.Value.(string))
-		c.dirty++
-	} else {
-		c.replyNull()
+		return
 	}
+	value, ok := l.lpop()
+	if !ok {
+		c.replyNull()
+		return
+	}
+	c.replyBulk(value)
+	c.dirty++
+
 }
 
 func rpopCommand(c *client) {
@@ -195,17 +458,15 @@ func rpopCommand(c *client) {
 	}
 	if l == nil {
 		c.replyNull()
-	} else if l.Len() > 0 {
-		el := l.Back()
-		l.Remove(el)
-		if l.Len() == 0 {
-			c.db.del(c.args[1])
-		}
-		c.replyBulk(el.Value.(string))
-		c.dirty++
-	} else {
-		c.replyNull()
+		return
 	}
+	value, ok := l.rpop()
+	if !ok {
+		c.replyNull()
+		return
+	}
+	c.replyBulk(value)
+	c.dirty++
 }
 
 func lindexCommand(c *client) {
@@ -213,12 +474,11 @@ func lindexCommand(c *client) {
 		c.replyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(c.args[2], 10, 64)
+	idx, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
 	}
-
 	l, ok := c.db.getList(c.args[1], false)
 	if !ok {
 		c.replyTypeError()
@@ -228,47 +488,12 @@ func lindexCommand(c *client) {
 		c.replyNull()
 		return
 	}
-	llen := l.Len()
-	var start int
-	if sn < 0 {
-		start = llen + int(sn)
-	} else {
-		start = int(sn)
-	}
-
-	if start < 0 || start >= llen || llen == 0 {
+	value, ok := l.lindex(int(idx))
+	if !ok {
 		c.replyNull()
 		return
 	}
-
-	var i int
-	var el *list.Element
-	if start > llen/2 {
-		// read from back
-		i = llen - 1
-		el = l.Back()
-		for el != nil {
-			if i == start {
-				c.replyBulk(el.Value.(string))
-				return
-			}
-			el = el.Prev()
-			i--
-		}
-	} else {
-		// read from front
-		i = 0
-		el = l.Front()
-		for el != nil {
-			if i == start {
-				c.replyBulk(el.Value.(string))
-				return
-			}
-			el = el.Next()
-			i++
-		}
-	}
-	c.replyNull()
+	c.replyBulk(value)
 }
 
 func lremCommand(c *client) {
@@ -276,7 +501,7 @@ func lremCommand(c *client) {
 		c.replyAritryError()
 		return
 	}
-	n, err := strconv.ParseInt(c.args[2], 10, 64)
+	count, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
@@ -290,52 +515,9 @@ func lremCommand(c *client) {
 		c.replyInt(0)
 		return
 	}
-	count := 0
-	v := c.args[3]
-	if n == 0 {
-		el := l.Front()
-		for el != nil {
-			next := el.Next()
-			if el.Value.(string) == v {
-				l.Remove(el)
-				count++
-				c.dirty++
-			}
-			el = next
-		}
-	} else if n > 0 {
-		el := l.Front()
-		for el != nil {
-			if n == 0 {
-				break
-			}
-			next := el.Next()
-			if el.Value.(string) == v {
-				l.Remove(el)
-				count++
-				c.dirty++
-				n--
-			}
-			el = next
-		}
-	} else if n < 0 {
-		n *= -1
-		el := l.Back()
-		for el != nil {
-			if n == 0 {
-				break
-			}
-			next := el.Prev()
-			if el.Value.(string) == v {
-				l.Remove(el)
-				count++
-				c.dirty++
-				n--
-			}
-			el = next
-		}
-	}
-	c.replyInt(count)
+	n := l.rem(int(count), c.args[3])
+	c.dirty += n
+	c.replyInt(n)
 }
 
 func lsetCommand(c *client) {
@@ -343,7 +525,7 @@ func lsetCommand(c *client) {
 		c.replyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(c.args[2], 10, 64)
+	idx, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
@@ -357,51 +539,13 @@ func lsetCommand(c *client) {
 		c.replyNoSuchKeyError()
 		return
 	}
-
-	llen := l.Len()
-	var start int
-	if sn < 0 {
-		start = llen + int(sn)
-	} else {
-		start = int(sn)
-	}
-	if start < 0 || start >= llen || llen == 0 {
+	ok = l.set(int(idx), c.args[3])
+	if !ok {
 		c.replyError("index out of range")
 		return
 	}
-
-	var i int
-	var el *list.Element
-	if start > llen/2 {
-		// read from back
-		i = llen - 1
-		el = l.Back()
-		for el != nil {
-			if i == start {
-				el.Value = c.args[3]
-				c.replyString("OK")
-				c.dirty++
-				return
-			}
-			el = el.Prev()
-			i--
-		}
-	} else {
-		// read from front
-		i = 0
-		el = l.Front()
-		for el != nil {
-			if i == start {
-				el.Value = c.args[3]
-				c.replyString("OK")
-				c.dirty++
-				return
-			}
-			el = el.Next()
-			i++
-		}
-	}
-	c.replyError("index out of range")
+	c.replyString("OK")
+	c.dirty++
 }
 
 func ltrimCommand(c *client) {
@@ -409,12 +553,12 @@ func ltrimCommand(c *client) {
 		c.replyAritryError()
 		return
 	}
-	sn, err := strconv.ParseInt(c.args[2], 10, 64)
+	start, err := strconv.ParseInt(c.args[2], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
 	}
-	en, err := strconv.ParseInt(c.args[3], 10, 64)
+	stop, err := strconv.ParseInt(c.args[3], 10, 64)
 	if err != nil {
 		c.replyInvalidIntError()
 		return
@@ -430,50 +574,10 @@ func ltrimCommand(c *client) {
 		return
 	}
 
-	llen := l.Len()
-
-	var start, stop int
-	if sn < 0 {
-		start = llen + int(sn)
-	} else {
-		start = int(sn)
-	}
-	if en < 0 {
-		stop = llen + int(en)
-	} else {
-		stop = int(en)
-	}
-
-	var i int
-	var el *list.Element
-	// delete from front
-	i = 0
-	el = l.Front()
-	for el != nil {
-		if i >= start {
-			break
-		}
-		next := el.Next()
-		l.Remove(el)
+	llen := l.len()
+	l.trim(int(start), int(stop))
+	if llen != l.len() {
 		c.dirty++
-		el = next
-		i++
-	}
-	// delete from back
-	i = l.Len() - 1
-	el = l.Back()
-	for el != nil {
-		if i < stop-1 {
-			break
-		}
-		prev := el.Prev()
-		l.Remove(el)
-		c.dirty++
-		el = prev
-		i--
-	}
-	if l.Len() == 0 {
-		c.db.del(c.args[1])
 	}
 	c.replyString("OK")
 }

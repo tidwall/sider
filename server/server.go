@@ -233,6 +233,7 @@ func (s *Server) startFatalErrorWatch() {
 				s.ferrdone = true
 				return
 			}
+			s.ferrcond.Wait()
 			s.ferrcond.L.Unlock()
 		}
 	}()
