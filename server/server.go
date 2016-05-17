@@ -74,6 +74,7 @@ func (s *Server) commandTable() {
 	s.register("expire", expireCommand, "w+")      // Keys
 	s.register("ttl", ttlCommand, "r")             // Keys
 	s.register("move", moveCommand, "w+")          // Keys
+	s.register("sort", sortCommand, "w+")          // Keys
 
 }
 

@@ -296,6 +296,34 @@ func (l *list) findel(idx int) *listItem {
 	return nil
 }
 
+func (l *list) strArr() []string {
+	i := 0
+	arr := make([]string, l.count)
+	el := l.front
+	for el != nil {
+		arr[i] = el.value
+		el = el.next
+		i++
+	}
+	return arr
+}
+
+func (l *list) numArr() []float64 {
+	i := 0
+	arr := make([]float64, l.count)
+	el := l.front
+	for el != nil {
+		n, err := strconv.ParseFloat(el.value, 64)
+		if err != nil {
+			return nil
+		}
+		arr[i] = n
+		el = el.next
+		i++
+	}
+	return arr
+}
+
 func (l *list) trim(start, stop int) {
 	var ok bool
 	var ostart, ostop int

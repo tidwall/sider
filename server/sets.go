@@ -128,6 +128,30 @@ func (s *set) len() int {
 	return len(s.m)
 }
 
+func (s *set) strArr() []string {
+	i := 0
+	arr := make([]string, len(s.m))
+	for s := range s.m {
+		arr[i] = s
+		i++
+	}
+	return arr
+}
+
+func (s *set) numArr() []float64 {
+	i := 0
+	arr := make([]float64, len(s.m))
+	for s := range s.m {
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return nil
+		}
+		arr[i] = n
+		i++
+	}
+	return arr
+}
+
 func saddCommand(c *client) {
 	if len(c.args) < 3 {
 		c.replyAritryError()
