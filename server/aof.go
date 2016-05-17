@@ -71,6 +71,7 @@ func (s *Server) loadAOF() error {
 	start := time.Now()
 	rd := &commandReader{rd: s.aof, rbuf: make([]byte, 64*1024)}
 	c := &client{wr: ioutil.Discard, s: s}
+	c.db = s.selectDB(0)
 	var read int
 	for {
 		raw, args, _, err := rd.readCommand()
@@ -83,7 +84,6 @@ func (s *Server) loadAOF() error {
 		}
 		c.args = args
 		c.raw = raw
-		c.db = s.selectDB(0)
 		commandName := autocase(args[0])
 		if cmd, ok := s.cmds[commandName]; ok {
 			cmd.funct(c)

@@ -411,7 +411,9 @@ func flushallCommand(c *client) {
 		c.replyAritryError()
 		return
 	}
-	c.db.flush()
+	for _, db := range c.s.dbs {
+		db.flush()
+	}
 	c.replyString("OK")
 	c.dirty++
 }

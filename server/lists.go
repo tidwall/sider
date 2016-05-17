@@ -441,6 +441,9 @@ func lpopCommand(c *client) {
 		c.replyNull()
 		return
 	}
+	if l.len() == 0 {
+		c.db.del(c.args[1])
+	}
 	c.replyBulk(value)
 	c.dirty++
 
@@ -464,6 +467,9 @@ func rpopCommand(c *client) {
 	if !ok {
 		c.replyNull()
 		return
+	}
+	if l.len() == 0 {
+		c.db.del(c.args[1])
 	}
 	c.replyBulk(value)
 	c.dirty++
@@ -516,6 +522,9 @@ func lremCommand(c *client) {
 		return
 	}
 	n := l.rem(int(count), c.args[3])
+	if l.len() == 0 {
+		c.db.del(c.args[1])
+	}
 	c.dirty += n
 	c.replyInt(n)
 }
@@ -578,6 +587,9 @@ func ltrimCommand(c *client) {
 	l.trim(int(start), int(stop))
 	if llen != l.len() {
 		c.dirty++
+	}
+	if l.len() == 0 {
+		c.db.del(c.args[1])
 	}
 	c.replyString("OK")
 }
