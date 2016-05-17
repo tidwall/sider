@@ -13,70 +13,75 @@ import (
 
 func (s *Server) commandTable() {
 	// "+" append aof
-	s.register("get", getCommand, "")           // Strings
-	s.register("getset", getsetCommand, "+")    // Strings
-	s.register("set", setCommand, "+")          // Strings
-	s.register("append", appendCommand, "+")    // Strings
-	s.register("bitcount", bitcountCommand, "") // Strings
-	s.register("incr", incrCommand, "+")        // Strings
-	s.register("incrby", incrbyCommand, "+")    // Strings
-	s.register("decr", decrCommand, "+")        // Strings
-	s.register("decrby", decrbyCommand, "+")    // Strings
-	s.register("mget", mgetCommand, "")         // Strings
-	s.register("setnx", setnxCommand, "+")      // Strings
-	s.register("mset", msetCommand, "+")        // Strings
-	s.register("msetnx", msetnxCommand, "+")    // Strings
+	// "w" write lock
+	// "r" read lock
+	s.register("get", getCommand, "r")           // Strings
+	s.register("getset", getsetCommand, "w+")    // Strings
+	s.register("set", setCommand, "w+")          // Strings
+	s.register("append", appendCommand, "w+")    // Strings
+	s.register("bitcount", bitcountCommand, "r") // Strings
+	s.register("incr", incrCommand, "w+")        // Strings
+	s.register("incrby", incrbyCommand, "w+")    // Strings
+	s.register("decr", decrCommand, "w+")        // Strings
+	s.register("decrby", decrbyCommand, "w+")    // Strings
+	s.register("mget", mgetCommand, "r")         // Strings
+	s.register("setnx", setnxCommand, "w+")      // Strings
+	s.register("mset", msetCommand, "w+")        // Strings
+	s.register("msetnx", msetnxCommand, "w+")    // Strings
 
-	s.register("lpush", lpushCommand, "+")  // Lists
-	s.register("rpush", rpushCommand, "+")  // Lists
-	s.register("lrange", lrangeCommand, "") // Lists
-	s.register("llen", llenCommand, "")     // Lists
-	s.register("lpop", lpopCommand, "+")    // Lists
-	s.register("rpop", rpopCommand, "+")    // Lists
-	s.register("lindex", lindexCommand, "") // Lists
-	s.register("lrem", lremCommand, "+")    // Lists
-	s.register("lset", lsetCommand, "+")    // Lists
-	s.register("ltrim", ltrimCommand, "+")  // Lists
+	s.register("lpush", lpushCommand, "w+")  // Lists
+	s.register("rpush", rpushCommand, "w+")  // Lists
+	s.register("lrange", lrangeCommand, "r") // Lists
+	s.register("llen", llenCommand, "r")     // Lists
+	s.register("lpop", lpopCommand, "w+")    // Lists
+	s.register("rpop", rpopCommand, "w+")    // Lists
+	s.register("lindex", lindexCommand, "r") // Lists
+	s.register("lrem", lremCommand, "w+")    // Lists
+	s.register("lset", lsetCommand, "w+")    // Lists
+	s.register("ltrim", ltrimCommand, "w+")  // Lists
 
-	s.register("sadd", saddCommand, "+")               // Sets
-	s.register("scard", scardCommand, "")              // Sets
-	s.register("smembers", smembersCommand, "")        // Sets
-	s.register("sismember", sismembersCommand, "")     // Sets
-	s.register("sdiff", sdiffCommand, "")              // Sets
-	s.register("sinter", sinterCommand, "")            // Sets
-	s.register("sunion", sunionCommand, "")            // Sets
-	s.register("sdiffstore", sdiffstoreCommand, "+")   // Sets
-	s.register("sinterstore", sinterstoreCommand, "+") // Sets
-	s.register("sunionstore", sunionstoreCommand, "+") // Sets
-	s.register("spop", spopCommand, "+")               // Sets
-	s.register("srandmember", srandmemberCommand, "")  // Sets
-	s.register("srem", sremCommand, "+")               // Sets
-	s.register("smove", smoveCommand, "+")             // Sets
+	s.register("sadd", saddCommand, "w+")               // Sets
+	s.register("scard", scardCommand, "r")              // Sets
+	s.register("smembers", smembersCommand, "r")        // Sets
+	s.register("sismember", sismembersCommand, "r")     // Sets
+	s.register("sdiff", sdiffCommand, "r")              // Sets
+	s.register("sinter", sinterCommand, "r")            // Sets
+	s.register("sunion", sunionCommand, "r")            // Sets
+	s.register("sdiffstore", sdiffstoreCommand, "w+")   // Sets
+	s.register("sinterstore", sinterstoreCommand, "w+") // Sets
+	s.register("sunionstore", sunionstoreCommand, "w+") // Sets
+	s.register("spop", spopCommand, "w+")               // Sets
+	s.register("srandmember", srandmemberCommand, "r")  // Sets
+	s.register("srem", sremCommand, "w+")               // Sets
+	s.register("smove", smoveCommand, "w+")             // Sets
 
-	s.register("echo", echoCommand, "")     // Connection
-	s.register("ping", pingCommand, "")     // Connection
-	s.register("select", selectCommand, "") // Connection
+	s.register("echo", echoCommand, "")      // Connection
+	s.register("ping", pingCommand, "")      // Connection
+	s.register("select", selectCommand, "w") // Connection
 
-	s.register("flushdb", flushdbCommand, "+")   // Server
-	s.register("flushall", flushallCommand, "+") // Server
-	s.register("dbsize", dbsizeCommand, "")      // Server
-	s.register("debug", debugCommand, "")        // Server
+	s.register("flushdb", flushdbCommand, "w+")   // Server
+	s.register("flushall", flushallCommand, "w+") // Server
+	s.register("dbsize", dbsizeCommand, "r")      // Server
+	s.register("debug", debugCommand, "w")        // Server
 
-	s.register("del", delCommand, "+")            // Keys
-	s.register("keys", keysCommand, "")           // Keys
-	s.register("rename", renameCommand, "+")      // Keys
-	s.register("renamenx", renamenxCommand, "+")  // Keys
-	s.register("type", typeCommand, "")           // Keys
-	s.register("randomkey", randomkeyCommand, "") // Keys
-	s.register("exists", existsCommand, "")       // Keys
-	s.register("expire", expireCommand, "+")      // Keys
-	s.register("ttl", ttlCommand, "")             // Keys
+	s.register("del", delCommand, "w+")            // Keys
+	s.register("keys", keysCommand, "r")           // Keys
+	s.register("rename", renameCommand, "w+")      // Keys
+	s.register("renamenx", renamenxCommand, "w+")  // Keys
+	s.register("type", typeCommand, "r")           // Keys
+	s.register("randomkey", randomkeyCommand, "r") // Keys
+	s.register("exists", existsCommand, "r")       // Keys
+	s.register("expire", expireCommand, "w+")      // Keys
+	s.register("ttl", ttlCommand, "r")             // Keys
+	s.register("move", moveCommand, "w+")          // Keys
 
 }
 
 type command struct {
 	name  string
 	aof   bool
+	read  bool
+	write bool
 	funct func(c *client)
 }
 
@@ -91,7 +96,7 @@ type Options struct {
 
 // Server represents a server object.
 type Server struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	l        net.Listener
 	options  *Options
 	cmds     map[string]*command
@@ -121,6 +126,10 @@ func (s *Server) register(commandName string, f func(c *client), opts string) {
 		switch c {
 		case '+':
 			cmd.aof = true
+		case 'r':
+			cmd.read = true
+		case 'w':
+			cmd.write = true
 		}
 	}
 	s.cmds[strings.ToLower(commandName)] = &cmd
@@ -369,12 +378,20 @@ func handleConn(conn net.Conn, s *Server) {
 		}
 		commandName := autocase(c.args[0])
 		if cmd, ok := s.cmds[commandName]; ok {
-			s.mu.Lock()
+			if cmd.write {
+				s.mu.Lock()
+			} else if cmd.read {
+				s.mu.RLock()
+			}
 			cmd.funct(c)
 			if c.dirty > 0 && cmd.aof {
 				c.db.aofbuf.Write(c.raw)
 			}
-			s.mu.Unlock()
+			if cmd.write {
+				s.mu.Unlock()
+			} else if cmd.read {
+				s.mu.RUnlock()
+			}
 		} else {
 			switch commandName {
 			default:

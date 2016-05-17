@@ -145,3 +145,30 @@ func ttlCommand(c *client) {
 		c.replyInt(int(expires.Sub(time.Now()) / time.Second))
 	}
 }
+func moveCommand(c *client) {
+	if len(c.args) != 3 {
+		c.replyAritryError()
+		return
+	}
+	num, err := strconv.ParseUint(c.args[2], 10, 32)
+	if err != nil {
+		c.replyError("index out of range")
+		return
+	}
+
+	value, ok := c.db.get(c.args[1])
+	if !ok {
+		c.replyInt(0)
+		return
+	}
+	db := c.s.selectDB(int(num))
+	_, ok = db.get(c.args[1])
+	if ok {
+		c.replyInt(0)
+		return
+	}
+	db.set(c.args[1], value)
+	c.db.del(c.args[1])
+	c.replyInt(1)
+	c.dirty++
+}
