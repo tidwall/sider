@@ -2,7 +2,7 @@ package server
 
 import "testing"
 
-func makeSimpleList(t testing.TB) *list {
+func testMakeSimpleList(t testing.TB) *list {
 	l := newList()
 	l.rpush("1")
 	l.rpush("2")
@@ -70,7 +70,7 @@ func testListString(t *testing.T, l *list, expect string) {
 }
 
 func TestList(t *testing.T) {
-	l := makeSimpleList(t)
+	l := testMakeSimpleList(t)
 	testListValue(t, l, 0, "4", true)
 	testListValue(t, l, 1, "3", true)
 	testListValue(t, l, 7, "a", true)
