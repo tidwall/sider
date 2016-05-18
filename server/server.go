@@ -2,10 +2,12 @@ package server
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -59,11 +61,15 @@ func (s *Server) commandTable() {
 	s.register("ping", pingCommand, "")      // Connection
 	s.register("select", selectCommand, "w") // Connection
 
-	s.register("flushdb", flushdbCommand, "w+")         // Server
-	s.register("flushall", flushallCommand, "w+")       // Server
-	s.register("dbsize", dbsizeCommand, "r")            // Server
-	s.register("debug", debugCommand, "w")              // Server
-	s.register("bgrewriteaof", bgrewriteaofCommand, "") // Server
+	s.register("flushdb", flushdbCommand, "w+")          // Server
+	s.register("flushall", flushallCommand, "w+")        // Server
+	s.register("dbsize", dbsizeCommand, "r")             // Server
+	s.register("debug", debugCommand, "w")               // Server
+	s.register("bgrewriteaof", bgrewriteaofCommand, "w") // Server
+	s.register("bgsave", bgsaveCommand, "w")             // Server
+	s.register("save", saveCommand, "w")                 // Server
+	s.register("lastsave", lastsaveCommand, "r")         // Server
+	s.register("shutdown", shutdownCommand, "w")         // Server
 
 	s.register("del", delCommand, "w+")            // Keys
 	s.register("keys", keysCommand, "r")           // Keys
@@ -78,6 +84,9 @@ func (s *Server) commandTable() {
 	s.register("sort", sortCommand, "w+")          // Keys
 
 }
+
+var errShutdownSave = errors.New("shutdown and save")
+var errShutdownNoSave = errors.New("shutdown and nosave")
 
 type command struct {
 	name  string
@@ -94,6 +103,8 @@ type Options struct {
 	IgnoreLogVerbose bool
 	IgnoreLogNotice  bool
 	IgnoreLogWarning bool
+	AppendOnlyPath   string
+	AppName, Version string
 }
 
 // Server represents a server object.
@@ -181,6 +192,12 @@ func (s *Server) fatalError(err error) {
 	s.ferrcond.L.Unlock()
 }
 
+func (s *Server) getFatalError() error {
+	s.ferrcond.L.Lock()
+	defer s.ferrcond.L.Unlock()
+	return s.ferr
+}
+
 //debug, verbose, notice, and warning.
 // // startExpireLoop runs a background routine which watches for exipred keys
 // // and forces their removal from the database. 100ms resolution.
@@ -244,6 +261,7 @@ func (s *Server) startFatalErrorWatch() {
 			if s.ferr != nil {
 				s.l.Close()
 				s.ferrdone = true
+				s.ferrcond.L.Unlock()
 				return
 			}
 			s.ferrcond.Wait()
@@ -275,6 +293,15 @@ func fillOptions(options *Options) *Options {
 	if options.LogWriter == nil {
 		options.LogWriter = os.Stderr
 	}
+	if options.AppendOnlyPath == "" {
+		options.AppendOnlyPath = "appendonly.aof"
+	}
+	if options.AppName == "" {
+		options.AppName = "Sider"
+	}
+	if options.Version == "" {
+		options.Version = "999.999.9999"
+	}
 	return options
 }
 
@@ -291,17 +318,36 @@ func Start(addr string, options *Options) (err error) {
 		if err == nil && s.ferr != nil {
 			err = s.ferr
 		}
+		switch err {
+		case errShutdownSave, errShutdownNoSave:
+			err = nil
+		}
+		s.lwarningf("%s is now ready to exit, bye bye...", s.options.AppName)
 	}()
-	s.lwarningf("Server started, Sider version 999.999.9999")
+	s.lwarningf("Server started, %s version %s", s.options.AppName, s.options.Version)
 	s.commandTable()
-	s.aofPath = "appendonly.aof"
+
+	s.aofPath = s.options.AppendOnlyPath
+	if !path.IsAbs(s.aofPath) {
+		if wd, err := os.Getwd(); err != nil {
+			s.lwarningf("%v", err)
+			return err
+		} else {
+			s.aofPath = path.Join(wd, s.aofPath)
+		}
+	}
 	if err = s.openAOF(); err != nil {
 		s.lwarningf("%v", err)
 		return err
 	}
+	defer func() {
+		switch s.getFatalError() {
+		case errShutdownSave:
+			s.lnoticef("DB saved on disk")
+		}
+	}()
 	defer s.closeAOF()
 	defer s.flushAOF()
-
 	// s.startExpireLoop()
 	// defer s.stopExpireLoop()
 
@@ -318,12 +364,30 @@ func Start(addr string, options *Options) (err error) {
 	s.startFatalErrorWatch()
 	defer s.stopFatalErrorWatch()
 
+	var conns []net.Conn
+	defer func() {
+		for _, conn := range conns {
+			conn.Close()
+		}
+	}()
+	defer func() {
+		switch s.getFatalError() {
+		case errShutdownSave, errShutdownNoSave:
+			s.lwarningf("User requested shutdown...")
+		}
+	}()
+
 	for {
 		conn, err := s.l.Accept()
 		if err != nil {
-			s.lwarningf("%v", err)
-			continue
+			ferr := s.getFatalError()
+			if ferr != errShutdownSave && ferr != errShutdownNoSave {
+				return err
+			} else {
+				return nil
+			}
 		}
+		conns = append(conns, conn)
 		go handleConn(conn, s)
 	}
 }
@@ -458,4 +522,79 @@ func bgrewriteaofCommand(c *client) {
 		return
 	}
 	c.replyString("Background append only file rewriting started")
+}
+
+func bgsaveCommand(c *client) {
+	if len(c.args) != 1 {
+		c.replyAritryError()
+		return
+	}
+	if ok := c.s.rewriteAOF(); !ok {
+		c.replyError("Background save already in progress")
+		return
+	}
+	c.replyString("Background saving started")
+}
+
+func lastsaveCommand(c *client) {
+	if len(c.args) != 1 {
+		c.replyAritryError()
+		return
+	}
+	fi, err := c.s.aof.Stat()
+	if err != nil {
+		c.replyError("Could not get the UNIX timestamp")
+		return
+	}
+	c.replyInt(int(fi.ModTime().Unix()))
+}
+
+func saveCommand(c *client) {
+	if len(c.args) != 1 {
+		c.replyAritryError()
+		return
+	}
+	if !c.s.rewriteAOF() {
+		c.replyError("Background save already in progress")
+		return
+	}
+	c.s.mu.Unlock()
+	t := time.NewTicker(time.Millisecond * 50)
+	defer t.Stop()
+	for range t.C {
+		c.s.mu.Lock()
+		res := c.s.aofrewrite
+		c.s.mu.Unlock()
+		if !res {
+			break
+		}
+	}
+	c.s.mu.Lock()
+	c.replyString("OK")
+}
+
+func shutdownCommand(c *client) {
+	if len(c.args) != 1 && len(c.args) != 2 {
+		c.replyAritryError()
+		return
+	}
+	save := true
+	if len(c.args) == 2 {
+		switch strings.ToLower(c.args[1]) {
+		default:
+			c.replySyntaxError()
+			return
+		case "save":
+			save = true
+		case "nosave":
+			save = false
+		}
+	}
+
+	if save {
+		c.s.fatalError(errShutdownSave)
+	} else {
+		c.s.fatalError(errShutdownNoSave)
+	}
+
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"time"
@@ -35,6 +36,7 @@ func (s *Server) openAOF() error {
 	}()
 	return s.loadAOF()
 }
+
 func writeBulk(wr io.Writer, arg string) {
 	fmt.Fprintf(wr, "$%d\r\n%s\r\n", len(arg), arg)
 }
@@ -87,8 +89,6 @@ func (a *keyItemByKey) Swap(i, j int) {
 	a.items[i], a.items[j] = a.items[j], a.items[i]
 }
 
-//func (a dbsByNumber)
-
 // rewriteAOF triggers a background rewrite of the AOF file.
 // Returns true if the process was started, or false if the the process a
 // rewrite is already in progress. There are a number of locks and unlocks which
@@ -97,8 +97,6 @@ func (a *keyItemByKey) Swap(i, j int) {
 // The rewrite process will slow down the main server a little bit but it
 // shouldn't be too noticeable.
 func (s *Server) rewriteAOF() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.aofrewrite {
 		return false
 	}
@@ -116,12 +114,15 @@ func (s *Server) rewriteAOF() bool {
 			} else {
 				s.lnoticef("Background AOF rewrite failed: %v", err)
 			}
+			s.aofrewrite = false
 			s.mu.Unlock()
 		}()
 
 		// Create a temporary aof file for writting the new commands to. If this
 		// process is successful then this file will become the active AOF.
-		tempName := s.aofPath + ".tmp"
+
+		tempName := path.Join(path.Dir(s.aofPath),
+			fmt.Sprintf("temp-rewrite-%d.aof", os.Getpid()))
 		var f *os.File
 		f, err = os.Create(tempName)
 		if err != nil {
@@ -189,7 +190,7 @@ func (s *Server) rewriteAOF() bool {
 			// write a SELECT command. If the first command is `SELECT 0` then
 			// skip this write.
 			if !(dbnum == -1 && db.num == 0) {
-				writeMultiBulk(wr, "select", db.num)
+				writeMultiBulk(wr, "SELECT", db.num)
 			}
 			dbnum = db.num
 			// collect db items (keys) into local variables
@@ -246,7 +247,7 @@ func (s *Server) rewriteAOF() bool {
 						err = errors.New("invalid type in database")
 					case string:
 						if len(msets) == 0 {
-							msets = append(msets, "mset", key, v)
+							msets = append(msets, "MSET", key, v)
 						} else {
 							msets = append(msets, key, v)
 						}
@@ -258,7 +259,7 @@ func (s *Server) rewriteAOF() bool {
 						var strs []interface{}
 						v.ascend(func(v string) bool {
 							if len(strs) == 0 {
-								strs = append(strs, "rpush", v)
+								strs = append(strs, "RPUSH", v)
 							} else {
 								strs = append(strs, v)
 							}
@@ -276,7 +277,7 @@ func (s *Server) rewriteAOF() bool {
 						var strs []interface{}
 						v.ascend(func(v string) bool {
 							if len(strs) == 0 {
-								strs = append(strs, "sadd", v)
+								strs = append(strs, "SADD", v)
 							} else {
 								strs = append(strs, v)
 							}
@@ -302,7 +303,7 @@ func (s *Server) rewriteAOF() bool {
 				t := expires[key]
 				seconds := int((t.Sub(now) / time.Second) + 1)
 				if seconds > 0 {
-					writeMultiBulk(wr, "expire", key, seconds)
+					writeMultiBulk(wr, "EXPIRE", key, seconds)
 				}
 			}
 			s.mu.RUnlock()
@@ -336,7 +337,7 @@ func (s *Server) rewriteAOF() bool {
 		// Write out the new commands that were added since the rewrite began.
 		if ln != lastpos {
 			if lastdbnum != dbnum {
-				writeMultiBulk(wr, "select", lastdbnum)
+				writeMultiBulk(wr, "SELECT", lastdbnum)
 			}
 			err = wr.Flush()
 			if err != nil {
@@ -350,6 +351,8 @@ func (s *Server) rewriteAOF() bool {
 			if err != nil {
 				return
 			}
+			s.lnoticef("Residual parent diff successfully flushed to the "+
+				"rewritten AOF (%0.2f MB)", float64(ln-lastpos)/1024.0/1024.0)
 		}
 
 		// Close the all of temp file resources.
@@ -371,8 +374,7 @@ func (s *Server) rewriteAOF() bool {
 			s.fatalError(err)
 			return
 		}
-		var finalsz int64
-		if finalsz, err = nf.Seek(0, 2); err != nil {
+		if _, err = nf.Seek(0, 2); err != nil {
 			s.fatalError(err)
 			return
 		}
@@ -380,8 +382,6 @@ func (s *Server) rewriteAOF() bool {
 		s.aof = nf
 
 		// We are really really done. Celebrate with a bag of Funyuns!
-		s.aofrewrite = false
-		s.lnoticef("Residual parent diff successfully flushed to the rewritten AOF (%0.2f MB)", float64(finalsz)/1024.0/1024.0)
 
 	}()
 	return true
@@ -402,7 +402,8 @@ func (s *Server) flushAOF() error {
 		if db.aofbuf.Len() > 0 {
 			selstr := strconv.FormatInt(int64(num), 10)
 			lenstr := strconv.FormatInt(int64(len(selstr)), 10)
-			if _, err := s.aof.WriteString("*2\r\n$6\r\nselect\r\n$" + lenstr + "\r\n" + selstr + "\r\n"); err != nil {
+			if _, err := s.aof.WriteString("*2\r\n$6\r\nSELECT\r\n$" + lenstr +
+				"\r\n" + selstr + "\r\n"); err != nil {
 				return err
 			}
 			if _, err := s.aof.Write(db.aofbuf.Bytes()); err != nil {
@@ -452,6 +453,7 @@ func (s *Server) loadAOF() error {
 		}
 		read++
 	}
-	s.lnoticef("DB loaded from disk: %.3f seconds", float64(time.Now().Sub(start))/float64(time.Second))
+	s.lnoticef("DB loaded from disk: %.3f seconds",
+		float64(time.Now().Sub(start))/float64(time.Second))
 	return nil
 }
