@@ -109,6 +109,7 @@ type Options struct {
 	IgnoreLogWarning bool
 	AppendOnlyPath   string
 	AppName, Version string
+	Config           map[string]string
 }
 
 // Server represents a server object.
@@ -127,8 +128,7 @@ type Server struct {
 	mode       string
 	executable string
 
-	expires     map[string]time.Time
-	expiresdone bool
+	expiresdone bool // flag for when the expires loop ends
 
 	aof        *os.File // the aof file handle
 	aofdbnum   int      // the db num of the last "select" written to the aof
@@ -210,56 +210,49 @@ func (s *Server) getFatalError() error {
 	return s.ferr
 }
 
-//debug, verbose, notice, and warning.
-// // startExpireLoop runs a background routine which watches for exipred keys
-// // and forces their removal from the database. 100ms resolution.
-// func (s *Server) startExpireLoop() {
-// 	go func() {
-// 		t := time.NewTicker(time.Second / 10)
-// 		defer t.Stop()
-// 		for range t.C {
-// 			s.mu.Lock()
-// 			if s.expiresdone {
-// 				s.mu.Unlock()
-// 				return
-// 			}
-// 			s.forceDeleteExpires()
-// 			s.mu.Unlock()
-// 		}
-// 	}()
-// }
+// startExpireLoop runs a background routine which watches for exipred keys
+// and forces their removal from the database. One second resolution.
+func (s *Server) startExpireLoop() {
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for range t.C {
+			s.mu.Lock()
+			if s.expiresdone {
+				s.mu.Unlock()
+				return
+			}
+			s.forceDeleteExpires()
+			s.mu.Unlock()
+		}
+	}()
+}
 
-// func (s *Server) forceDeleteExpires() {
-// 	if len(s.expires) == 0 || s.follower {
-// 		return
-// 	}
-// 	now := time.Now()
-// 	var aofbuf bytes.Buffer
-// 	for key, expires := range s.expires {
-// 		if now.After(expires) {
-// 			delete(s.keys, key)
-// 			aofbuf.WriteString("*2\r\n$3\r\ndel\r\n$")
-// 			aofbuf.WriteString(strconv.FormatInt(int64(len(key)), 10))
-// 			aofbuf.WriteString("\r\n")
-// 			aofbuf.WriteString(key)
-// 			aofbuf.WriteString("\r\n")
-// 			delete(s.expires, key)
-// 		}
-// 	}
-// 	if aofbuf.Len() > 0 {
-// 		if _, err := s.aof.Write(aofbuf.Bytes()); err != nil {
-// 			panic(err)
-// 		}
-// 	}
-// }
+func (s *Server) forceDeleteExpires() {
+	if s.follower {
+		return
+	}
+	deleted := false
+	for _, db := range s.dbs {
+		if db.deleteExpires() {
+			deleted = true
+		}
+	}
+	if deleted {
+		if err := s.flushAOF(); err != nil {
+			s.fatalError(err)
+			return
+		}
+	}
+}
 
-// // stopExpireLoop will force delete all expires and stop the background routine
-// func (s *Server) stopExpireLoop() {
-// 	s.mu.Lock()
-// 	s.forceDeleteExpires()
-// 	s.expiresdone = true
-// 	s.mu.Unlock()
-// }
+// stopExpireLoop will force delete all expires and stop the background routine
+func (s *Server) stopExpireLoop() {
+	s.mu.Lock()
+	s.forceDeleteExpires()
+	s.expiresdone = true
+	s.mu.Unlock()
+}
 
 // startFatalErrorWatch
 func (s *Server) startFatalErrorWatch() {
@@ -298,6 +291,19 @@ func (s *Server) selectDB(num int) *database {
 	return db
 }
 
+func fillBoolConfigOption(options *Options, configKey string, defaultValue bool) {
+	switch strings.ToLower(options.Config[configKey]) {
+	default:
+		if defaultValue {
+			options.Config[configKey] = "yes"
+		} else {
+			options.Config[configKey] = "no"
+		}
+	case "yes", "no":
+		options.Config[configKey] = strings.ToLower(options.Config[configKey])
+	}
+}
+
 func fillOptions(options *Options) *Options {
 	if options == nil {
 		options = &Options{}
@@ -314,6 +320,10 @@ func fillOptions(options *Options) *Options {
 	if options.Version == "" {
 		options.Version = "999.999.9999"
 	}
+	if options.Config == nil {
+		options.Config = map[string]string{}
+	}
+	fillBoolConfigOption(options, "protected-mode", true)
 	return options
 }
 
@@ -321,7 +331,6 @@ func Start(addr string, options *Options) (err error) {
 	s := &Server{
 		cmds:     make(map[string]*command),
 		dbs:      make(map[int]*database),
-		expires:  make(map[string]time.Time),
 		clients:  make(map[*client]bool),
 		monitors: make(map[*client]bool),
 		aofdbnum: -1,
@@ -367,8 +376,8 @@ func Start(addr string, options *Options) (err error) {
 	}()
 	defer s.closeAOF()
 	defer s.flushAOF()
-	// s.startExpireLoop()
-	// defer s.stopExpireLoop()
+	s.startExpireLoop()
+	defer s.stopExpireLoop()
 
 	s.l, err = net.Listen("tcp", addr)
 	if err != nil {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"strconv"
 	"time"
 )
 
@@ -181,15 +182,24 @@ func (db *database) update(key string, value interface{}) {
 	db.items[key] = item
 }
 
-func (db *database) deleteExpires() (deletedKeys []string) {
+func (db *database) deleteExpires() bool {
+	if len(db.expires) == 0 {
+		return false
+	}
+	deleted := false
 	now := time.Now()
 	for key, t := range db.expires {
 		if now.Before(t) {
 			continue
 		}
 		delete(db.items, key)
+		db.aofbuf.WriteString("*2\r\n$3\r\nDEL\r\n$")
+		db.aofbuf.WriteString(strconv.FormatInt(int64(len(key)), 10))
+		db.aofbuf.WriteString("\r\n")
+		db.aofbuf.WriteString(key)
+		db.aofbuf.WriteString("\r\n")
 		delete(db.expires, key)
-		deletedKeys = append(deletedKeys, key)
+		deleted = true
 	}
-	return deletedKeys
+	return deleted
 }
