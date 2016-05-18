@@ -11,13 +11,15 @@ type dbItem struct {
 }
 
 type database struct {
+	num     int
 	items   map[string]dbItem
 	expires map[string]time.Time
 	aofbuf  bytes.Buffer
 }
 
-func newDB() *database {
+func newDB(num int) *database {
 	return &database{
+		num:     num,
 		items:   make(map[string]dbItem),
 		expires: make(map[string]time.Time),
 	}

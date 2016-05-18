@@ -59,10 +59,11 @@ func (s *Server) commandTable() {
 	s.register("ping", pingCommand, "")      // Connection
 	s.register("select", selectCommand, "w") // Connection
 
-	s.register("flushdb", flushdbCommand, "w+")   // Server
-	s.register("flushall", flushallCommand, "w+") // Server
-	s.register("dbsize", dbsizeCommand, "r")      // Server
-	s.register("debug", debugCommand, "w")        // Server
+	s.register("flushdb", flushdbCommand, "w+")         // Server
+	s.register("flushall", flushallCommand, "w+")       // Server
+	s.register("dbsize", dbsizeCommand, "r")            // Server
+	s.register("debug", debugCommand, "w")              // Server
+	s.register("bgrewriteaof", bgrewriteaofCommand, "") // Server
 
 	s.register("del", delCommand, "w+")            // Keys
 	s.register("keys", keysCommand, "r")           // Keys
@@ -107,9 +108,11 @@ type Server struct {
 	expires     map[string]time.Time
 	expiresdone bool
 
-	aof       *os.File // the aof file handle
-	aofdbnum  int      // the db num of the last "select" written to the aof
-	aofclosed bool     // flag for when the aof file is closed
+	aof        *os.File // the aof file handle
+	aofdbnum   int      // the db num of the last "select" written to the aof
+	aofclosed  bool     // flag for when the aof file is closed
+	aofrewrite bool     // flag for when the aof is in the process of being rewritten
+	aofPath    string   // the full absolute path to the aof file
 
 	ferr     error      // a fatal error. setting this should happen in the fatalError function
 	ferrcond *sync.Cond // synchronize the watch
@@ -259,7 +262,7 @@ func (s *Server) stopFatalErrorWatch() {
 func (s *Server) selectDB(num int) *database {
 	db, ok := s.dbs[num]
 	if !ok {
-		db = newDB()
+		db = newDB(num)
 		s.dbs[num] = db
 	}
 	return db
@@ -291,6 +294,7 @@ func Start(addr string, options *Options) (err error) {
 	}()
 	s.lwarningf("Server started, Sider version 999.999.9999")
 	s.commandTable()
+	s.aofPath = "appendonly.aof"
 	if err = s.openAOF(); err != nil {
 		s.lwarningf("%v", err)
 		return err
@@ -442,4 +446,16 @@ func dbsizeCommand(c *client) {
 		return
 	}
 	c.replyInt(c.db.len())
+}
+
+func bgrewriteaofCommand(c *client) {
+	if len(c.args) != 1 {
+		c.replyAritryError()
+		return
+	}
+	if ok := c.s.rewriteAOF(); !ok {
+		c.replyError("Background append only file rewriting already in progress")
+		return
+	}
+	c.replyString("Background append only file rewriting started")
 }

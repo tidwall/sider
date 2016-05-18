@@ -214,6 +214,16 @@ func (l *list) rem(count int, value string) int {
 	return n
 }
 
+func (l *list) ascend(iterator func(value string) bool) {
+	el := l.front
+	for el != nil {
+		if !iterator(el.value) {
+			return
+		}
+		el = el.next
+	}
+}
+
 func (l *list) lrange(start, stop int, count func(n int), iterator func(value string) bool) {
 	var ok bool
 	if start, _, ok = l.ridx(start, true); !ok {
