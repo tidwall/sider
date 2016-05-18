@@ -2,12 +2,14 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +72,8 @@ func (s *Server) commandTable() {
 	s.register("save", saveCommand, "w")                 // Server
 	s.register("lastsave", lastsaveCommand, "r")         // Server
 	s.register("shutdown", shutdownCommand, "w")         // Server
+	s.register("info", infoCommand, "r")                 // Server
+	s.register("monitor", monitorCommand, "w")           // Server
 
 	s.register("del", delCommand, "w+")            // Keys
 	s.register("keys", keysCommand, "r")           // Keys
@@ -109,12 +113,19 @@ type Options struct {
 
 // Server represents a server object.
 type Server struct {
-	mu       sync.RWMutex
-	l        net.Listener
-	options  *Options
-	cmds     map[string]*command
-	dbs      map[int]*database
-	follower bool
+	mu      sync.RWMutex
+	l       net.Listener
+	options *Options
+	cmds    map[string]*command
+	dbs     map[int]*database
+	started time.Time
+
+	clients  map[*client]bool // connected clients
+	monitors map[*client]bool // clients monitoring
+
+	follower   bool
+	mode       string
+	executable string
 
 	expires     map[string]time.Time
 	expiresdone bool
@@ -128,6 +139,7 @@ type Server struct {
 	ferr     error      // a fatal error. setting this should happen in the fatalError function
 	ferrcond *sync.Cond // synchronize the watch
 	ferrdone bool       // flag for when the fatal error watch is complete
+
 }
 
 // register is called from the commandTable() function. The command map will contains
@@ -310,9 +322,14 @@ func Start(addr string, options *Options) (err error) {
 		cmds:     make(map[string]*command),
 		dbs:      make(map[int]*database),
 		expires:  make(map[string]time.Time),
+		clients:  make(map[*client]bool),
+		monitors: make(map[*client]bool),
 		aofdbnum: -1,
 		options:  fillOptions(options),
 		ferrcond: sync.NewCond(&sync.Mutex{}),
+		started:  time.Now(),
+		mode:     "standalone",
+		follower: false,
 	}
 	defer func() {
 		if err == nil && s.ferr != nil {
@@ -327,14 +344,16 @@ func Start(addr string, options *Options) (err error) {
 	s.lwarningf("Server started, %s version %s", s.options.AppName, s.options.Version)
 	s.commandTable()
 
+	var wd string
+	wd, err = os.Getwd()
+	if err != nil {
+		s.lwarningf("%v", err)
+		return err
+	}
+	s.executable = path.Join(wd, os.Args[0])
 	s.aofPath = s.options.AppendOnlyPath
 	if !path.IsAbs(s.aofPath) {
-		if wd, err := os.Getwd(); err != nil {
-			s.lwarningf("%v", err)
-			return err
-		} else {
-			s.aofPath = path.Join(wd, s.aofPath)
-		}
+		s.aofPath = path.Join(wd, s.aofPath)
 	}
 	if err = s.openAOF(); err != nil {
 		s.lwarningf("%v", err)
@@ -364,10 +383,11 @@ func Start(addr string, options *Options) (err error) {
 	s.startFatalErrorWatch()
 	defer s.stopFatalErrorWatch()
 
-	var conns []net.Conn
+	conns := make(map[net.Conn]bool)
 	defer func() {
-		for _, conn := range conns {
+		for conn := range conns {
 			conn.Close()
+			delete(conns, conn)
 		}
 	}()
 	defer func() {
@@ -387,9 +407,48 @@ func Start(addr string, options *Options) (err error) {
 				return nil
 			}
 		}
-		conns = append(conns, conn)
+		conns[conn] = true
 		go handleConn(conn, s)
+
 	}
+}
+
+func (s *Server) broadcastMonitors(dbnum int, addr string, args []string) {
+	s.mu.Lock()
+	t := float64(time.Now().UnixNano()) / float64(time.Second)
+	s.mu.Unlock()
+	w := &bytes.Buffer{}
+	fmt.Fprintf(w, "+%.6f [%d %s]", t, dbnum, addr)
+	for _, arg := range args {
+		w.WriteByte(' ')
+		w.WriteByte('"')
+		for i := 0; i < len(arg); i++ {
+			ch := arg[i]
+			switch {
+			default:
+				w.WriteByte('\\')
+				w.WriteByte('x')
+				hex := strconv.FormatUint(uint64(ch), 16)
+				if len(hex) == 1 {
+					w.WriteByte('0')
+				}
+				w.WriteString(hex)
+			case ch > 31 && ch < 127:
+				w.WriteByte(ch)
+			}
+		}
+		w.WriteByte('"')
+	}
+	w.WriteByte('\r')
+	w.WriteByte('\n')
+	s.mu.Lock()
+	for c := range s.monitors {
+		if wr, ok := c.wr.(*bufio.Writer); ok {
+			wr.WriteString(w.String())
+			wr.Flush()
+		}
+	}
+	s.mu.Unlock()
 }
 
 // autocase will return an ascii string in uppercase or lowercase, but never
@@ -430,11 +489,21 @@ func handleConn(conn net.Conn, s *Server) {
 	c := &client{wr: wr, s: s}
 	defer c.flushAOF()
 	s.mu.Lock()
+	s.clients[c] = true
 	c.db = s.selectDB(0)
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.clients, c)
+		delete(s.monitors, c)
+		s.mu.Unlock()
+	}()
+	addr := conn.RemoteAddr().String()
 	var flush bool
 	var err error
 	for {
+		dbnum := c.db.num
+		c.errd = false
 		c.raw, c.args, flush, err = rd.readCommand()
 		if err != nil {
 			if err, ok := err.(*protocolError); ok {
@@ -460,6 +529,9 @@ func handleConn(conn net.Conn, s *Server) {
 				s.mu.Unlock()
 			} else if cmd.read {
 				s.mu.RUnlock()
+			}
+			if !c.errd && cmd.name != "monitor" {
+				s.broadcastMonitors(dbnum, addr, c.args)
 			}
 		} else {
 			switch commandName {
@@ -596,5 +668,17 @@ func shutdownCommand(c *client) {
 	} else {
 		c.s.fatalError(errShutdownNoSave)
 	}
+}
 
+func monitorCommand(c *client) {
+	if len(c.args) != 1 {
+		c.replyAritryError()
+		return
+	}
+	if c.monitor {
+		return
+	}
+	c.monitor = true
+	c.s.monitors[c] = true
+	c.replyString("OK")
 }
