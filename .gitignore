@@ -1,4 +1,5 @@
 .DS_Store
-tile38-server
+sider-server
 *.aof
 *.rdb
+*.conf

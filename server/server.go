@@ -74,6 +74,8 @@ func (s *Server) commandTable() {
 	s.register("shutdown", shutdownCommand, "w")         // Server
 	s.register("info", infoCommand, "r")                 // Server
 	s.register("monitor", monitorCommand, "w")           // Server
+	s.register("config", configCommand, "w")             // Server
+	s.register("auth", authCommand, "r")                 // Server
 
 	s.register("del", delCommand, "w+")            // Keys
 	s.register("keys", keysCommand, "r")           // Keys
@@ -110,13 +112,23 @@ type Options struct {
 	AppendOnlyPath   string
 	AppName, Version string
 	Config           map[string]string
+	ConfigRewrite    func(map[string]string) error
+}
+
+type config struct {
+	port          int
+	bind          string
+	bindIsLocal   bool
+	protectedMode bool
+	requirepass   string
 }
 
 // Server represents a server object.
 type Server struct {
 	mu      sync.RWMutex
 	l       net.Listener
-	options *Options
+	options *Options // options that are passed from the caller
+	cfg     *config  // server configuration
 	cmds    map[string]*command
 	dbs     map[int]*database
 	started time.Time
@@ -164,9 +176,9 @@ func (s *Server) register(commandName string, f func(c *client), opts string) {
 }
 
 // The log format is described at http://build47.com/redis-log-format-levels/
-func (s *Server) lf(c byte, format string, args ...interface{}) {
+func Log(w io.Writer, c byte, format string, args ...interface{}) {
 	fmt.Fprintf(
-		s.options.LogWriter,
+		w,
 		"%d:M %s %c %s\n",
 		os.Getpid(),
 		time.Now().Format("2 Jan 15:04:05.000"),
@@ -174,24 +186,25 @@ func (s *Server) lf(c byte, format string, args ...interface{}) {
 		fmt.Sprintf(format, args...),
 	)
 }
+
 func (s *Server) ldebugf(format string, args ...interface{}) {
 	if !s.options.IgnoreLogDebug {
-		s.lf('.', format, args...)
+		Log(s.options.LogWriter, '.', format, args...)
 	}
 }
 func (s *Server) lverbosf(format string, args ...interface{}) {
 	if !s.options.IgnoreLogVerbose {
-		s.lf('-', format, args...)
+		Log(s.options.LogWriter, '-', format, args...)
 	}
 }
 func (s *Server) lnoticef(format string, args ...interface{}) {
 	if !s.options.IgnoreLogNotice {
-		s.lf('*', format, args...)
+		Log(s.options.LogWriter, '*', format, args...)
 	}
 }
 func (s *Server) lwarningf(format string, args ...interface{}) {
 	if !s.options.IgnoreLogWarning {
-		s.lf('#', format, args...)
+		Log(s.options.LogWriter, '#', format, args...)
 	}
 }
 
@@ -323,23 +336,68 @@ func fillOptions(options *Options) *Options {
 	if options.Config == nil {
 		options.Config = map[string]string{}
 	}
+	// force valid strings into each config property
+	s := func(s string) string {
+		return s
+	}
+	options.Config["bind"] = s(options.Config["bind"])
+	options.Config["port"] = s(options.Config["port"])
+	options.Config["protected-mode"] = s(options.Config["protected-mode"])
+	options.Config["requirepass"] = s(options.Config["requirepass"])
+
+	// defaults
+	if options.Config["port"] == "" {
+		options.Config["port"] = "6379"
+	}
 	fillBoolConfigOption(options, "protected-mode", true)
+
 	return options
 }
 
-func Start(addr string, options *Options) (err error) {
+type cfgerr struct {
+	message  string
+	property string
+	value    string
+}
+
+func (err *cfgerr) Error() string {
+	return fmt.Sprintf("Fatal config file error: '%s \"%s\"': %s", err.property, err.value, err.message)
+}
+
+func fillConfig(options *Options) (*config, error) {
+	cfg := &config{}
+	n, err := strconv.ParseUint(options.Config["port"], 10, 16)
+	if err != nil {
+		return nil, &cfgerr{"Invalid port", "port", options.Config["port"]}
+	}
+	cfg.port = int(n)
+	cfg.bind = strings.ToLower(options.Config["bind"])
+	cfg.bindIsLocal = cfg.bind == "" || cfg.bind == "127.0.0.1" || cfg.bind == "::1" || cfg.bind == "localhost"
+	switch strings.ToLower(options.Config["protected-mode"]) {
+	default:
+		return nil, &cfgerr{"argument must be 'yes' or 'no'", "protected-mode", options.Config["protected-mode"]}
+	case "yes":
+		cfg.protectedMode = true
+	case "no":
+		cfg.protectedMode = false
+	}
+	cfg.requirepass = options.Config["requirepass"]
+	return cfg, nil
+}
+
+func Start(options *Options) (err error) {
 	s := &Server{
 		cmds:     make(map[string]*command),
 		dbs:      make(map[int]*database),
 		clients:  make(map[*client]bool),
 		monitors: make(map[*client]bool),
 		aofdbnum: -1,
-		options:  fillOptions(options),
 		ferrcond: sync.NewCond(&sync.Mutex{}),
 		started:  time.Now(),
 		mode:     "standalone",
 		follower: false,
 	}
+	var ready bool
 	defer func() {
 		if err == nil && s.ferr != nil {
 			err = s.ferr
@@ -348,10 +406,19 @@ func Start(addr string, options *Options) (err error) {
 		case errShutdownSave, errShutdownNoSave:
 			err = nil
 		}
-		s.lwarningf("%s is now ready to exit, bye bye...", s.options.AppName)
+		if ready {
+			s.lwarningf("%s is now ready to exit, bye bye...", s.options.AppName)
+		}
 	}()
+	s.options = fillOptions(options)
+	s.cfg, err = fillConfig(options)
+	if err != nil {
+		s.lwarningf("%v", err)
+		return
+	}
 	s.lwarningf("Server started, %s version %s", s.options.AppName, s.options.Version)
 	s.commandTable()
+	ready = true
 
 	var wd string
 	wd, err = os.Getwd()
@@ -378,7 +445,7 @@ func Start(addr string, options *Options) (err error) {
 	defer s.flushAOF()
 	s.startExpireLoop()
 	defer s.stopExpireLoop()
-
+	addr := options.Config["bind"] + ":" + options.Config["port"]
 	s.l, err = net.Listen("tcp", addr)
 	if err != nil {
 		s.lwarningf("%v", err)
@@ -490,12 +557,23 @@ func autocase(command string) string {
 	return command
 }
 
+func (s *Server) protected() bool {
+	if !s.cfg.protectedMode {
+		return false
+	}
+	if !s.cfg.bindIsLocal {
+		return false
+	}
+	return s.cfg.protectedMode && s.cfg.requirepass == ""
+}
+
 func handleConn(conn net.Conn, s *Server) {
 	defer conn.Close()
 	rd := newCommandReader(conn)
 	wr := bufio.NewWriter(conn)
 	defer wr.Flush()
 	c := &client{wr: wr, s: s}
+	c.addr = conn.RemoteAddr().String()
 	defer c.flushAOF()
 	s.mu.Lock()
 	s.clients[c] = true
@@ -507,7 +585,6 @@ func handleConn(conn net.Conn, s *Server) {
 		delete(s.monitors, c)
 		s.mu.Unlock()
 	}()
-	addr := conn.RemoteAddr().String()
 	var flush bool
 	var err error
 	for {
@@ -525,22 +602,25 @@ func handleConn(conn net.Conn, s *Server) {
 		}
 		commandName := autocase(c.args[0])
 		if cmd, ok := s.cmds[commandName]; ok {
-			if cmd.write {
-				s.mu.Lock()
-			} else if cmd.read {
-				s.mu.RLock()
-			}
-			cmd.funct(c)
-			if c.dirty > 0 && cmd.aof {
-				c.db.aofbuf.Write(c.raw)
-			}
-			if cmd.write {
-				s.mu.Unlock()
-			} else if cmd.read {
-				s.mu.RUnlock()
-			}
-			if !c.errd && cmd.name != "monitor" {
-				s.broadcastMonitors(dbnum, addr, c.args)
+			if c.authenticate(cmd) {
+				if cmd.write {
+					s.mu.Lock()
+				} else if cmd.read {
+					s.mu.RLock()
+				}
+				cmd.funct(c)
+				if c.dirty > 0 && cmd.aof {
+					c.db.aofbuf.Write(c.raw)
+				}
+
+				if cmd.write {
+					s.mu.Unlock()
+				} else if cmd.read {
+					s.mu.RUnlock()
+				}
+				if !c.errd && cmd.name != "monitor" {
+					s.broadcastMonitors(dbnum, c.addr, c.args)
+				}
 			}
 		} else {
 			switch commandName {
@@ -689,5 +769,92 @@ func monitorCommand(c *client) {
 	}
 	c.monitor = true
 	c.s.monitors[c] = true
+	c.replyString("OK")
+}
+
+func configCommand(c *client) {
+	if len(c.args) < 2 {
+		c.replyAritryError()
+		return
+	}
+	switch strings.ToLower(c.args[1]) {
+	default:
+		c.replyError("CONFIG subcommand must be one of GET, SET, RESETSTAT, REWRITE")
+	case "get":
+		configGetCommand(c)
+	case "set":
+		configSetCommand(c)
+	case "resetstat":
+		configResetStatCommand(c)
+	case "rewrite":
+		configRewriteCommand(c)
+	}
+}
+func configGetCommand(c *client) {
+	if len(c.args) != 3 {
+		c.replyError("Wrong number of arguments for CONFIG " + c.args[1])
+		return
+	}
+	switch c.args[2] {
+	default:
+		c.replyMultiBulkLen(0)
+		return
+	case "port", "bind", "protected-mode", "requirepass":
+	}
+	c.replyMultiBulkLen(2)
+	c.replyBulk(c.args[2])
+	c.replyBulk(c.s.options.Config[c.args[2]])
+
+}
+func configSetCommand(c *client) {
+	if len(c.args) != 4 {
+		c.replyError("Wrong number of arguments for CONFIG " + c.args[1])
+		return
+	}
+	switch strings.ToLower(c.args[2]) {
+	default:
+		c.replyError("Unsupported CONFIG parameter: " + c.args[2])
+		return
+	case "requirepass":
+		c.s.options.Config["requirepass"] = c.args[3]
+		c.s.cfg.requirepass = c.args[3]
+	case "protected-mode":
+		switch strings.ToLower(c.args[3]) {
+		default:
+			c.replyError("Invalid argument '" + c.args[3] + "' for CONFIG SET '" + c.args[2] + "'")
+			return
+		case "yes":
+			c.s.options.Config["protected-mode"] = "yes"
+			c.s.cfg.protectedMode = true
+		case "no":
+			c.s.options.Config["protected-mode"] = "no"
+			c.s.cfg.protectedMode = false
+		}
+	}
+	c.replyString("OK")
+}
+func configResetStatCommand(c *client) {
+	c.replyString("OK")
+}
+func configRewriteCommand(c *client) {
+	if c.s.options.ConfigRewrite == nil {
+		c.replyString("OK")
+	} else if err := c.s.options.ConfigRewrite(c.s.options.Config); err != nil {
+		c.replyError(err.Error())
+	} else {
+		c.replyString("OK")
+	}
+}
+
+func authCommand(c *client) {
+	if len(c.args) != 2 {
+		c.replyAritryError()
+		return
+	}
+	if c.s.cfg.requirepass != c.args[1] {
+		c.replyError("invalid password")
+		return
+	}
+	c.authd = 2
 	c.replyString("OK")
 }
