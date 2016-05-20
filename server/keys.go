@@ -421,3 +421,21 @@ func sortCommand(c *client) {
 		c.replyBulk(value)
 	}
 }
+
+func expireatCommand(c *client) {
+	if len(c.args) != 3 {
+		c.replyAritryError()
+		return
+	}
+	seconds, err := strconv.ParseInt(c.args[2], 10, 64)
+	if err != nil {
+		c.replyError("value is not an integer or out of range")
+		return
+	}
+	if c.db.expire(c.args[1], time.Unix(seconds, 0)) {
+		c.replyInt(1)
+		c.dirty++
+	} else {
+		c.replyInt(0)
+	}
+}

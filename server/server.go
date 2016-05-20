@@ -89,7 +89,7 @@ func (s *Server) commandTable() {
 	s.register("ttl", ttlCommand, "r")             // Keys
 	s.register("move", moveCommand, "w+")          // Keys
 	s.register("sort", sortCommand, "w+")          // Keys
-
+	s.register("expireat", expireatCommand, "w+")  // Keys
 }
 
 var errShutdownSave = errors.New("shutdown and save")
