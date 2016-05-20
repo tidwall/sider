@@ -57,6 +57,9 @@ func parseArgs() (map[string]string, string, bool) {
 				vals = append(vals, os.Args[i])
 			}
 			i += len(vals)
+			if strings.HasPrefix(arg, "--") {
+				arg = arg[2:]
+			}
 			switch arg {
 			default:
 				printBadConfig(arg, vals, ln)
