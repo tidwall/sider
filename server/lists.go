@@ -631,3 +631,36 @@ func ltrimCommand(c *client) {
 	}
 	c.replyString("OK")
 }
+
+func rpoplpushCommand(c *client) {
+	if len(c.args) != 3 {
+		c.replyAritryError()
+		return
+	}
+	l1, ok := c.db.getList(c.args[1], false)
+	if !ok {
+		c.replyTypeError()
+		return
+	}
+	l2, ok := c.db.getList(c.args[2], false)
+	if !ok {
+		c.replyTypeError()
+		return
+	}
+	if l1 == nil {
+		c.replyNull()
+		return
+	}
+	v, ok := l1.rpop()
+	if !ok {
+		c.replyNull()
+		return
+	}
+	if l2 == nil {
+		l2 = newList()
+		c.db.set(c.args[2], l2)
+	}
+	l2.lpush(v)
+	c.replyBulk(v)
+	c.dirty++
+}

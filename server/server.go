@@ -33,16 +33,17 @@ func (s *Server) commandTable() {
 	s.register("mset", msetCommand, "w+")        // Strings
 	s.register("msetnx", msetnxCommand, "w+")    // Strings
 
-	s.register("lpush", lpushCommand, "w+")  // Lists
-	s.register("rpush", rpushCommand, "w+")  // Lists
-	s.register("lrange", lrangeCommand, "r") // Lists
-	s.register("llen", llenCommand, "r")     // Lists
-	s.register("lpop", lpopCommand, "w+")    // Lists
-	s.register("rpop", rpopCommand, "w+")    // Lists
-	s.register("lindex", lindexCommand, "r") // Lists
-	s.register("lrem", lremCommand, "w+")    // Lists
-	s.register("lset", lsetCommand, "w+")    // Lists
-	s.register("ltrim", ltrimCommand, "w+")  // Lists
+	s.register("lpush", lpushCommand, "w+")         // Lists
+	s.register("rpush", rpushCommand, "w+")         // Lists
+	s.register("lrange", lrangeCommand, "r")        // Lists
+	s.register("llen", llenCommand, "r")            // Lists
+	s.register("lpop", lpopCommand, "w+")           // Lists
+	s.register("rpop", rpopCommand, "w+")           // Lists
+	s.register("lindex", lindexCommand, "r")        // Lists
+	s.register("lrem", lremCommand, "w+")           // Lists
+	s.register("lset", lsetCommand, "w+")           // Lists
+	s.register("ltrim", ltrimCommand, "w+")         // Lists
+	s.register("rpoplpush", rpoplpushCommand, "w+") // Lists
 
 	s.register("sadd", saddCommand, "w+")               // Sets
 	s.register("scard", scardCommand, "r")              // Sets
