@@ -1,5 +1,6 @@
 .DS_Store
-sider-server
+*-server
+!cmd/sider-*
 *.aof
 *.rdb
 *.conf
