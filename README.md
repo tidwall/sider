@@ -12,22 +12,22 @@ I wanted to understand all of the baseline challenges of running a Redis impleme
 
 Commands
 --------
-**Strings**
+**Strings**  
 append,bitcount,decr,decrby,get,getset,incr,incrby,mget,mset,msetnx,set,setnx
 
-**Lists**
+**Lists**  
 lindex,llen,lpop,lpush,lrange,lrem,lset,ltrim,rpoplpush,rpop,rpush
 
-**Sets**
+**Sets**  
 sadd,scard,smembers,sismember,sdiff,sinter,sunion,sdiffstore,sinterstore,sunionstore,spop,srandmember,srem,smove
 
-**Connection**
+**Connection**  
 echo,ping,select
 
-**Server**
+**Server**  
 auth,bgrewriteaof,bgsave,config,dbsize,debug,flushdb,flushall,info,lastsave,monitor,save,shutdown
 
-**Keys**
+**Keys**  
 del,exists,expireat,expire,keys,move,randomkey,rename,renamenx,sort,ttl,type
 
 
