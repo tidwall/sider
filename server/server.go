@@ -112,16 +112,7 @@ type Options struct {
 	IgnoreLogWarning bool
 	AppendOnlyPath   string
 	AppName, Version string
-	Config           map[string]string
-	ConfigRewrite    func(map[string]string) error
-}
-
-type config struct {
-	port          int
-	bind          string
-	bindIsLocal   bool
-	protectedMode bool
-	requirepass   string
+	Args             []string
 }
 
 // Server represents a server object.
@@ -177,7 +168,7 @@ func (s *Server) register(commandName string, f func(c *client), opts string) {
 }
 
 // The log format is described at http://build47.com/redis-log-format-levels/
-func Log(w io.Writer, c byte, format string, args ...interface{}) {
+func log(w io.Writer, c byte, format string, args ...interface{}) {
 	fmt.Fprintf(
 		w,
 		"%d:M %s %c %s\n",
@@ -190,22 +181,22 @@ func Log(w io.Writer, c byte, format string, args ...interface{}) {
 
 func (s *Server) ldebugf(format string, args ...interface{}) {
 	if !s.options.IgnoreLogDebug {
-		Log(s.options.LogWriter, '.', format, args...)
+		log(s.options.LogWriter, '.', format, args...)
 	}
 }
 func (s *Server) lverbosf(format string, args ...interface{}) {
 	if !s.options.IgnoreLogVerbose {
-		Log(s.options.LogWriter, '-', format, args...)
+		log(s.options.LogWriter, '-', format, args...)
 	}
 }
 func (s *Server) lnoticef(format string, args ...interface{}) {
 	if !s.options.IgnoreLogNotice {
-		Log(s.options.LogWriter, '*', format, args...)
+		log(s.options.LogWriter, '*', format, args...)
 	}
 }
 func (s *Server) lwarningf(format string, args ...interface{}) {
 	if !s.options.IgnoreLogWarning {
-		Log(s.options.LogWriter, '#', format, args...)
+		log(s.options.LogWriter, '#', format, args...)
 	}
 }
 
@@ -305,87 +296,6 @@ func (s *Server) selectDB(num int) *database {
 	return db
 }
 
-func fillBoolConfigOption(options *Options, configKey string, defaultValue bool) {
-	switch strings.ToLower(options.Config[configKey]) {
-	default:
-		if defaultValue {
-			options.Config[configKey] = "yes"
-		} else {
-			options.Config[configKey] = "no"
-		}
-	case "yes", "no":
-		options.Config[configKey] = strings.ToLower(options.Config[configKey])
-	}
-}
-
-func fillOptions(options *Options) *Options {
-	if options == nil {
-		options = &Options{}
-	}
-	if options.LogWriter == nil {
-		options.LogWriter = os.Stderr
-	}
-	if options.AppendOnlyPath == "" {
-		options.AppendOnlyPath = "appendonly.aof"
-	}
-	if options.AppName == "" {
-		options.AppName = "Sider"
-	}
-	if options.Version == "" {
-		options.Version = "999.999.9999"
-	}
-	if options.Config == nil {
-		options.Config = map[string]string{}
-	}
-	// force valid strings into each config property
-	s := func(s string) string {
-		return s
-	}
-	options.Config["bind"] = s(options.Config["bind"])
-	options.Config["port"] = s(options.Config["port"])
-	options.Config["protected-mode"] = s(options.Config["protected-mode"])
-	options.Config["requirepass"] = s(options.Config["requirepass"])
-
-	// defaults
-	if options.Config["port"] == "" {
-		options.Config["port"] = "6379"
-	}
-	fillBoolConfigOption(options, "protected-mode", true)
-
-	return options
-}
-
-type cfgerr struct {
-	message  string
-	property string
-	value    string
-}
-
-func (err *cfgerr) Error() string {
-	return fmt.Sprintf("Fatal config file error: '%s \"%s\"': %s", err.property, err.value, err.message)
-}
-
-func fillConfig(options *Options) (*config, error) {
-	cfg := &config{}
-	n, err := strconv.ParseUint(options.Config["port"], 10, 16)
-	if err != nil {
-		return nil, &cfgerr{"Invalid port", "port", options.Config["port"]}
-	}
-	cfg.port = int(n)
-	cfg.bind = strings.ToLower(options.Config["bind"])
-	cfg.bindIsLocal = cfg.bind == "" || cfg.bind == "127.0.0.1" || cfg.bind == "::1" || cfg.bind == "localhost"
-	switch strings.ToLower(options.Config["protected-mode"]) {
-	default:
-		return nil, &cfgerr{"argument must be 'yes' or 'no'", "protected-mode", options.Config["protected-mode"]}
-	case "yes":
-		cfg.protectedMode = true
-	case "no":
-		cfg.protectedMode = false
-	}
-	cfg.requirepass = options.Config["requirepass"]
-	return cfg, nil
-}
-
 func Start(options *Options) (err error) {
 	s := &Server{
 		cmds:     make(map[string]*command),
@@ -411,10 +321,16 @@ func Start(options *Options) (err error) {
 			s.lwarningf("%s is now ready to exit, bye bye...", s.options.AppName)
 		}
 	}()
-	s.options = fillOptions(options)
-	s.cfg, err = fillConfig(options)
+	options, configMap, configFile, ok := fillOptions(options)
+	s.options = options // this should be set even if there's an error.
+	if !ok {
+		err = errors.New("options failure")
+		return
+	}
+	s.cfg, err = fillConfig(configMap, configFile)
 	if err != nil {
-		s.lwarningf("%v", err)
+		err = errors.New("config failure")
+		//s.lwarningf("%v", err)
 		return
 	}
 	s.lwarningf("Server started, %s version %s", s.options.AppName, s.options.Version)
@@ -446,7 +362,7 @@ func Start(options *Options) (err error) {
 	defer s.flushAOF()
 	s.startExpireLoop()
 	defer s.stopExpireLoop()
-	addr := options.Config["bind"] + ":" + options.Config["port"]
+	addr := s.cfg.kvm["bind"] + ":" + s.cfg.kvm["port"]
 	s.l, err = net.Listen("tcp", addr)
 	if err != nil {
 		s.lwarningf("%v", err)
@@ -804,7 +720,7 @@ func configGetCommand(c *client) {
 	}
 	c.replyMultiBulkLen(2)
 	c.replyBulk(c.args[2])
-	c.replyBulk(c.s.options.Config[c.args[2]])
+	c.replyBulk(c.s.cfg.kvm[c.args[2]])
 
 }
 func configSetCommand(c *client) {
@@ -817,7 +733,7 @@ func configSetCommand(c *client) {
 		c.replyError("Unsupported CONFIG parameter: " + c.args[2])
 		return
 	case "requirepass":
-		c.s.options.Config["requirepass"] = c.args[3]
+		c.s.cfg.kvm["requirepass"] = c.args[3]
 		c.s.cfg.requirepass = c.args[3]
 	case "protected-mode":
 		switch strings.ToLower(c.args[3]) {
@@ -825,10 +741,10 @@ func configSetCommand(c *client) {
 			c.replyError("Invalid argument '" + c.args[3] + "' for CONFIG SET '" + c.args[2] + "'")
 			return
 		case "yes":
-			c.s.options.Config["protected-mode"] = "yes"
+			c.s.cfg.kvm["protected-mode"] = "yes"
 			c.s.cfg.protectedMode = true
 		case "no":
-			c.s.options.Config["protected-mode"] = "no"
+			c.s.cfg.kvm["protected-mode"] = "no"
 			c.s.cfg.protectedMode = false
 		}
 	}
@@ -838,13 +754,19 @@ func configResetStatCommand(c *client) {
 	c.replyString("OK")
 }
 func configRewriteCommand(c *client) {
-	if c.s.options.ConfigRewrite == nil {
-		c.replyString("OK")
-	} else if err := c.s.options.ConfigRewrite(c.s.options.Config); err != nil {
-		c.replyError(err.Error())
-	} else {
-		c.replyString("OK")
+	if len(c.args) != 2 {
+		c.replyError("Wrong number of arguments for CONFIG " + c.args[1])
+		return
 	}
+	if c.s.cfg.file == "" {
+		c.replyError("The server is running without a config file")
+		return
+	}
+	if err := mergeConfigFile(c.s.cfg.file, c.s.cfg.kvm); err != nil {
+		c.replyError(fmt.Sprintf("Rewriting config: %v", err))
+		return
+	}
+	c.replyString("OK")
 }
 
 func authCommand(c *client) {
