@@ -1,12 +1,12 @@
 Sider
 =====
-A Redis 1.0 clone written in Go.
+A Redis clone written in Go. Supports 1.0 commands.
 
 **This is an experimental side project and is not intended for production.**
 
 
-Why?
-----
+Goals
+------
 I wanted to understand all of the baseline challenges of running a Redis implementation in Go, and sometimes the best way to understand an architecture is to cleanroom it. 
 
 
