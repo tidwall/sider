@@ -1,6 +1,8 @@
 Sider
 =====
 A Redis clone written in Go. Supports 1.0 commands.
+I wrote this to prove to myself that Go can perform nearly as well as C for general networking and disk io.
+This project helped to lead to the development of [Tile38](https://github.com/tidwall/tile38) and [Redcon](https://github.com/tidwall/redcon).
 
 **This is an experimental side project and is not intended for production.**
 
