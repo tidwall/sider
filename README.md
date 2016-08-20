@@ -4,7 +4,6 @@ A Redis clone written in Go. Supports 1.0 commands.
 
 **This is an experimental side project and is not intended for production.**
 
-
 Why?
 ----
 I wanted to understand all of the baseline challenges of running a Redis implementation in Go, and sometimes the best way to understand an architecture is to cleanroom it. 
@@ -29,11 +28,6 @@ auth,bgrewriteaof,bgsave,config,dbsize,debug,flushdb,flushall,info,lastsave,moni
 
 **Keys**  
 del,exists,expireat,expire,keys,move,randomkey,rename,renamenx,sort,ttl,type
-
-
-Performance
------------
-Using the `redis-benchmark` tool Sider runs about 75% the speed of Redis.
 
 
 License
